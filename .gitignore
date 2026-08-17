@@ -1,4 +1,5 @@
 node_modules/
+desktop/runtime-config.json
 .pnpm-store/
 .chrome-*/
 .edge-*/

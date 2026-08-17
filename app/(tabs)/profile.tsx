@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Input, Screen, Text } from '@/components/ui';
-import { useAuth, useDeviceSessions, useSubscription } from '@/hooks';
+import { useAuth, useDesktopUpdate, useDeviceSessions, useSubscription } from '@/hooks';
 import { exportProgressCsv, exportWorkspaceBackup, getFoundingStatus, getMyFoundingProfile, isOwnerEmail, shareReferral, type FoundingProfile, type FoundingStatus } from '@/services';
 import { getTelemetryEnabled, setTelemetryEnabled } from '@/services/observability';
 import { useAppStore } from '@/stores';
@@ -18,6 +18,7 @@ export default function ProfileScreen() {
   const { isPro, isMax, planName, status, trialDaysLeft } = useSubscription();
   const { devices, currentDeviceId, loading: devicesLoading, error: devicesError, revoke: revokeDevice } = useDeviceSessions();
   const { accentId, colorMode, palette, setAccentId, setColorMode } = useAccentTheme();
+  const desktopUpdate = useDesktopUpdate();
   const { goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions } = useAppStore();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
@@ -26,10 +27,15 @@ export default function ProfileScreen() {
   const [analyticsEnabled, setAnalyticsEnabledState] = useState(true);
   const [exporting, setExporting] = useState(false); const [exportMessage, setExportMessage] = useState('');
   const [founding, setFounding] = useState<FoundingProfile>(); const [foundingStatus, setFoundingStatus] = useState<FoundingStatus>(); const [shareMessage, setShareMessage] = useState('');
+  const [desktopInfo, setDesktopInfo] = useState<{ appVersion: string; electronVersion: string; platform: string; packaged: boolean }>();
   const canDelete = deleteConfirmation === 'Delete';
   const isOwner = isOwnerEmail(user?.email);
 
   useEffect(() => { getTelemetryEnabled().then(setAnalyticsEnabledState).catch(() => undefined); }, []);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    window.doitDesktop?.getInfo().then(setDesktopInfo).catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!user || demoMode) return;
     Promise.all([getMyFoundingProfile(), getFoundingStatus()]).then(([profile, campaign]) => { setFounding(profile); setFoundingStatus(campaign); }).catch(() => undefined);
@@ -125,6 +131,12 @@ export default function ProfileScreen() {
         <Text variant="caption" color="muted">Backups contain your goal data. Store them somewhere private; passwords and payment details are never included.</Text>
         {exportMessage ? <Text variant="caption" color="accent">{exportMessage}</Text> : null}
       </Card>
+      {desktopInfo ? <Card style={styles.about}>
+        <View style={styles.appearanceHeading}><View style={[styles.appearanceIcon, { backgroundColor: palette.muted }]}><Ionicons name="desktop-outline" color={palette.accent} size={21} /></View><View style={styles.flex}><Text variant="heading">About DOIT AI</Text><Text variant="caption" color="muted">Desktop version {desktopInfo.appVersion} · {desktopInfo.platform === 'win32' ? 'Windows' : desktopInfo.platform === 'darwin' ? 'macOS' : desktopInfo.platform}</Text></View></View>
+        <View style={styles.versionRow}><View><Text variant="label">Updates</Text><Text variant="caption" color={desktopUpdate.state.phase === 'error' ? 'danger' : 'muted'}>{desktopUpdate.state.phase === 'checking' ? 'Checking for a new version…' : desktopUpdate.state.phase === 'available' ? `Version ${desktopUpdate.state.availableVersion} is available` : desktopUpdate.state.phase === 'downloading' ? `Downloading · ${desktopUpdate.state.percent ?? 0}%` : desktopUpdate.state.phase === 'downloaded' ? 'Update downloaded and ready' : desktopUpdate.state.message ?? 'DOIT checks automatically when it starts.'}</Text></View><Ionicons name={desktopUpdate.state.phase === 'downloaded' ? 'checkmark-circle' : 'cloud-download-outline'} color={desktopUpdate.state.phase === 'downloaded' ? colors.success : colors.textSecondary} size={22} /></View>
+        {desktopUpdate.state.phase === 'downloaded' ? <Button label="Restart and update" icon="refresh" onPress={desktopUpdate.install} /> : desktopUpdate.state.phase === 'available' ? <Button label={`Download version ${desktopUpdate.state.availableVersion}`} icon="download-outline" onPress={desktopUpdate.download} /> : <Button label="Check for updates" variant="secondary" icon="refresh-outline" disabled={desktopUpdate.state.phase === 'checking' || desktopUpdate.state.phase === 'downloading'} onPress={desktopUpdate.check} />}
+        <Text variant="caption" color="muted">Electron {desktopInfo.electronVersion} · Updates are verified against the official DOIT AI GitHub release feed.</Text>
+      </Card> : null}
       <Card style={styles.devices}>
         <View style={styles.appearanceHeading}><View style={[styles.appearanceIcon, { backgroundColor: palette.muted }]}><Ionicons name="phone-portrait-outline" color={palette.accent} size={21} /></View><View style={styles.flex}><Text variant="heading">Your devices</Text><Text variant="caption" color="muted">DOIT keeps each login independent. Sign out a device you no longer use.</Text></View></View>
         {devicesLoading && !devices.length ? <Text variant="caption" color="muted">Checking your active devices…</Text> : null}
@@ -183,7 +195,7 @@ const styles = StyleSheet.create({
   settingsGroup: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden', paddingHorizontal: spacing.md },
   setting: { alignItems: 'center', borderBottomColor: colors.borderSubtle, borderBottomWidth: 1, flexDirection: 'row', gap: spacing.md, minHeight: 76 },
   settingIcon: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, height: 42, justifyContent: 'center', width: 42 },
-  settingCopy: { flex: 1, gap: spacing.xxs }, account: { gap: spacing.md }, backup: { gap: spacing.md }, devices: { gap: spacing.md }, deviceRow: { alignItems: 'center', borderTopColor: colors.borderSubtle, borderTopWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 66, paddingTop: spacing.sm }, deviceIcon: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, height: 40, justifyContent: 'center', width: 40 }, deviceSignOut: { alignItems: 'center', backgroundColor: colors.dangerMuted, borderRadius: radius.pill, justifyContent: 'center', minHeight: 36, paddingHorizontal: spacing.sm },
+  settingCopy: { flex: 1, gap: spacing.xxs }, account: { gap: spacing.md }, backup: { gap: spacing.md }, about: { gap: spacing.md }, versionRow: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 64, paddingHorizontal: spacing.md }, devices: { gap: spacing.md }, deviceRow: { alignItems: 'center', borderTopColor: colors.borderSubtle, borderTopWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 66, paddingTop: spacing.sm }, deviceIcon: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, height: 40, justifyContent: 'center', width: 40 }, deviceSignOut: { alignItems: 'center', backgroundColor: colors.dangerMuted, borderRadius: radius.pill, justifyContent: 'center', minHeight: 36, paddingHorizontal: spacing.sm },
   appearance: { gap: spacing.md }, appearanceHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.md }, appearanceIcon: { alignItems: 'center', borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, modeGrid: { flexDirection: 'row', gap: spacing.sm }, modeOption: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 62, paddingHorizontal: spacing.sm }, modeOptionSelected: { backgroundColor: colors.accentMuted, borderColor: colors.accent }, modePreview: { alignItems: 'center', backgroundColor: '#17191D', borderColor: '#30343B', borderRadius: radius.sm, borderWidth: 1, height: 38, justifyContent: 'center', width: 42 }, modePreviewLight: { backgroundColor: '#F7F8FA', borderColor: '#D5D9DF' }, appearanceDivider: { backgroundColor: colors.borderSubtle, height: 1 }, colourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }, colourOption: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexBasis: '40%', flexDirection: 'row', flexGrow: 1, gap: spacing.sm, minHeight: 52, minWidth: 140, paddingHorizontal: spacing.sm }, swatch: { alignItems: 'center', borderRadius: radius.pill, height: 28, justifyContent: 'center', width: 28 },
   toggle: { backgroundColor: colors.border, borderRadius: radius.pill, height: 26, justifyContent: 'center', paddingHorizontal: 3, width: 44 }, toggleOn: { backgroundColor: colors.accent }, toggleThumb: { backgroundColor: colors.textSecondary, borderRadius: radius.pill, height: 20, width: 20 }, toggleThumbOn: { alignSelf: 'flex-end', backgroundColor: colors.onAccent },
   delete: { alignItems: 'center', justifyContent: 'center', minHeight: 48 },

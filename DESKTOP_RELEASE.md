@@ -26,3 +26,11 @@ The website's `/download` page will then deliver the actual installers. Large in
 ## Signing note
 
 The current builds are unsigned. Windows may show a SmartScreen warning and macOS may require right-clicking the app and choosing Open. Removing those warnings for public release requires a Windows code-signing certificate and an Apple Developer certificate/notarisation respectively.
+
+## Automatic updates and crash recovery
+
+Installed Windows releases check the official GitHub release feed shortly after startup. Release builds must include the generated `latest.yml` and installer `.blockmap` beside the installer asset; the GitHub workflow publishes these automatically.
+
+When an update is available, DOIT asks before downloading, shows progress, and only installs after the user chooses **Restart and update**. macOS uses the same flow once the application is signed; unsigned macOS builds cannot auto-update because macOS requires a valid code signature.
+
+Desktop and renderer crashes are reported without default personal information when `EXPO_PUBLIC_SENTRY_DSN` is configured as a GitHub Actions secret. Without it, recovery screens and local diagnostics still work, but remote crash delivery is disabled.

@@ -37,7 +37,7 @@ function sendSentryEvent(error: unknown, context?: Record<string, unknown>) {
     platform: 'javascript',
     level: 'error',
     environment: 'production',
-    release: 'doit-ai-web@1.0.0',
+    release: 'doit-ai-web@1.1.0',
     user: telemetryUserId ? { id: telemetryUserId } : undefined,
     exception: { values: [{ type: normalised.name || 'Error', value: normalised.message }] },
     extra: { stack: normalised.stack?.slice(0, 12000), ...context },

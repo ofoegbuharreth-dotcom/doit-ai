@@ -1,0 +1,76 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useEffect, useState } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+
+import { useDesktopUpdate } from '@/hooks';
+import { colors, radius, spacing } from '@/theme';
+import { Text } from '@/components/ui';
+
+export function DesktopReliability() {
+  const { isDesktop, state, download, install } = useDesktopUpdate();
+  const [online, setOnline] = useState(true);
+  const [dismissedVersion, setDismissedVersion] = useState<string>();
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const refresh = () => setOnline(window.navigator.onLine);
+    refresh();
+    window.addEventListener('online', refresh);
+    window.addEventListener('offline', refresh);
+    return () => {
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('offline', refresh);
+    };
+  }, []);
+
+  const visible = isDesktop
+    && ['available', 'downloading', 'downloaded'].includes(state.phase)
+    && dismissedVersion !== state.availableVersion;
+  const downloading = state.phase === 'downloading';
+  const downloaded = state.phase === 'downloaded';
+
+  return <>
+    {!online ? <View accessibilityRole="alert" style={styles.offline}>
+      <View style={styles.offlineIcon}><Ionicons name="cloud-offline-outline" color={colors.warning} size={19} /></View>
+      <View style={styles.flex}><Text variant="label">You’re offline</Text><Text variant="caption" color="secondary">Your saved plan still works. Cloud changes will sync when your connection returns.</Text></View>
+    </View> : null}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !downloading && setDismissedVersion(state.availableVersion)}>
+      <View style={styles.overlay}>
+        <Pressable disabled={downloading} style={StyleSheet.absoluteFill} onPress={() => setDismissedVersion(state.availableVersion)} />
+        <View accessibilityViewIsModal style={styles.dialog}>
+          <View style={styles.headingRow}>
+            <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-up'} color={colors.onAccent} size={23} /></View>
+            <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready when you are.' : `Version ${state.availableVersion ?? ''} is ready.`}</Text></View>
+          </View>
+          <Text color="secondary">{downloaded ? 'Restart DOIT to finish installing the update. Your current work is already saved.' : 'Get the newest improvements, fixes, and reliability upgrades without downloading another installer.'}</Text>
+          {downloading ? <View style={styles.progressBlock}>
+            <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${state.percent ?? 0}%` }]} /></View>
+            <Text variant="caption" color="secondary">Downloading securely · {state.percent ?? 0}%</Text>
+          </View> : null}
+          <Pressable disabled={downloading} onPress={downloaded ? install : download} style={[styles.primary, downloading && styles.disabled]}>
+            <Ionicons name={downloaded ? 'refresh' : 'download-outline'} color={colors.onAccent} size={19} />
+            <Text variant="label" style={styles.primaryText}>{downloaded ? 'Restart and update' : downloading ? 'Downloading…' : 'Download update'}</Text>
+          </Pressable>
+          {!downloading ? <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Not now'}</Text></Pressable> : null}
+        </View>
+      </View>
+    </Modal>
+  </>;
+}
+
+const styles = StyleSheet.create({
+  offline: { alignItems: 'center', alignSelf: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.warning, borderRadius: radius.lg, borderWidth: 1, elevation: 9, flexDirection: 'row', gap: spacing.sm, left: spacing.md, maxWidth: 620, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, position: 'absolute', right: spacing.md, top: spacing.md, zIndex: 999 },
+  offlineIcon: { alignItems: 'center', backgroundColor: colors.warningMuted, borderRadius: radius.pill, height: 38, justifyContent: 'center', width: 38 },
+  flex: { flex: 1 },
+  overlay: { alignItems: 'center', backgroundColor: colors.overlay, flex: 1, justifyContent: 'center', padding: spacing.lg },
+  dialog: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.xl, borderWidth: 1, gap: spacing.lg, maxWidth: 520, padding: spacing.xl, width: '100%' },
+  headingRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+  icon: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, height: 50, justifyContent: 'center', width: 50 },
+  progressBlock: { gap: spacing.xs },
+  progressTrack: { backgroundColor: colors.border, borderRadius: radius.pill, height: 8, overflow: 'hidden' },
+  progressFill: { backgroundColor: colors.accent, borderRadius: radius.pill, height: '100%' },
+  primary: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', minHeight: 54, paddingHorizontal: spacing.lg },
+  primaryText: { color: colors.onAccent },
+  disabled: { opacity: 0.72 },
+  later: { alignItems: 'center', justifyContent: 'center', minHeight: 42 },
+});

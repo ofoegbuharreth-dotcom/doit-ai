@@ -10,6 +10,7 @@ import { AuthProvider, DeviceSessionsProvider, SubscriptionProvider, useAuth } f
 import { AppStoreProvider } from '@/stores';
 import { Sentry, identifyTelemetryUser, trackScreen } from '@/services/observability';
 import { AppErrorBoundary } from '@/components/system/AppErrorBoundary';
+import { DesktopReliability } from '@/components/system/DesktopReliability';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -43,6 +44,7 @@ function AppProviders() {
           <ThemeProvider value={navigationTheme}>
             <StatusBar style={colorMode === 'dark' ? 'light' : 'dark'} />
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'simple_push', gestureEnabled: true, fullScreenGestureEnabled: true }} />
+            <DesktopReliability />
           </ThemeProvider>
         </AppStoreProvider>
       </SubscriptionProvider>

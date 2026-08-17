@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DOIT AI — Recovery</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { align-items: center; background: #090a0c; color: #f6f7f8; display: flex; font-family: Inter, ui-sans-serif, system-ui, sans-serif; justify-content: center; padding: 32px; }
+    main { align-items: center; display: flex; flex-direction: column; gap: 18px; max-width: 580px; text-align: center; }
+    .mark { align-items: center; background: #261a43; border: 1px solid #7049b4; border-radius: 20px; color: #a983ff; display: flex; font-size: 25px; font-weight: 800; height: 68px; justify-content: center; width: 68px; }
+    h1 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -.04em; line-height: 1.08; margin: 4px 0 0; }
+    p { color: #a8adb7; font-size: 17px; line-height: 1.65; margin: 0; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+    button { background: #9b7af1; border: 0; border-radius: 13px; color: #090a0c; cursor: pointer; font: inherit; font-weight: 700; min-height: 50px; padding: 0 22px; }
+    button.secondary { background: #17191d; border: 1px solid #30343b; color: #f6f7f8; }
+    small { color: #6f7580; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">D✓</div>
+    <h1>DOIT needs a quick restart.</h1>
+    <p>The app could not finish loading. Your account and saved goals are safe. Reload DOIT now, or check your connection if the problem continues.</p>
+    <div class="actions">
+      <button onclick="location.href='doit://app/'">Reload DOIT</button>
+      <button class="secondary" onclick="location.reload()">Try again</button>
+    </div>
+    <small>Support: ofoegbuharreth@gmail.com</small>
+  </main>
+</body>
+</html>

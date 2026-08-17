@@ -16,18 +16,24 @@ jobs:
           - name: Windows installer
             os: windows-latest
             command: npm run build:desktop:windows
-            artifact: release/*.exe
+            artifact: |
+              release/*.exe
+              release/*.yml
+              release/*.blockmap
           - name: macOS installers
             os: macos-latest
             command: npm run build:desktop:mac
             artifact: |
               release/*.dmg
               release/*.zip
+              release/*.yml
+              release/*.blockmap
     runs-on: ${{ matrix.os }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
       EXPO_PUBLIC_AI_MODE: hybrid
     steps:
       - uses: actions/checkout@v4
