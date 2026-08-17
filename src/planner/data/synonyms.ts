@@ -1,0 +1,30 @@
+export const NORMALIZATION_REPLACEMENTS: [RegExp, string][] = [
+  [/\bi\s*wanna\b/g, 'i want to'],
+  [/\bwanna\b/g, 'want to'],
+  [/\bi\s*gotta\b/g, 'i need to'],
+  [/\bgotta\b/g, 'need to'],
+  [/\bi'd like to\b/g, 'i want to'],
+  [/\bget good at\b/g, 'improve at'],
+  [/\bget better at\b/g, 'improve at'],
+  [/\bmake cash\b/g, 'earn money'],
+  [/\bmake money\b/g, 'earn money'],
+  [/\bwork out\b/g, 'exercise'],
+  [/\bweb site\b/g, 'website'],
+  [/\bprogramme\b/g, 'program'],
+  [/\bprocastinate\b/g, 'procrastinate'],
+  [/\bprocastinating\b/g, 'procrastinating'],
+  [/\bprocastination\b/g, 'procrastination'],
+  [/\bpyhton\b/g, 'python'],
+  [/\bjim\b/g, 'gym'],
+];
+
+export const SUBJECT_ALIASES: Record<string, string> = {
+  'public speaking': 'speaking confidently with people',
+  'speaking to people': 'speaking confidently with people',
+  footy: 'football',
+  soccer: 'football',
+  cash: 'money',
+  savings: 'money',
+  revise: 'study',
+  revision: 'study',
+};

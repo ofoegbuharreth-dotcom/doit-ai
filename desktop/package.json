@@ -1,0 +1,11 @@
+{
+  "name": "doit-ai-desktop",
+  "version": "1.0.0",
+  "description": "The dedicated DOIT AI desktop application.",
+  "author": "DOIT AI",
+  "private": true,
+  "main": "main.cjs",
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}

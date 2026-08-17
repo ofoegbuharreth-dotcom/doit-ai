@@ -1,0 +1,6 @@
+<resources>
+  <string name="app_name">DOIT AI</string>
+  <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
+  <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+  <string name="widget_doitnextaction_description" translatable="false">Your recommended DOIT action on the home screen</string>
+</resources>

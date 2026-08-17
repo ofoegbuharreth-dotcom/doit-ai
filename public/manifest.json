@@ -1,0 +1,42 @@
+{
+  "name": "DOIT AI",
+  "short_name": "DOIT",
+  "id": "/",
+  "description": "Turn goals into clear daily action with an adaptive AI coach.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090A0C",
+  "theme_color": "#91B83C",
+  "categories": ["productivity", "lifestyle"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Today",
+      "short_name": "Today",
+      "description": "Open your recommended action for today",
+      "url": "/home"
+    },
+    {
+      "name": "Create a goal",
+      "short_name": "New goal",
+      "description": "Turn a new goal into an actionable plan",
+      "url": "/create-goal"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/doit-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/doit-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

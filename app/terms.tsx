@@ -1,0 +1,20 @@
+import { LegalPage } from '@/components/web/LegalPage';
+
+const sections = [
+  { title: 'Who we are', body: 'DOIT AI provides an AI-assisted goal-planning and productivity service. These terms form an agreement between you and DOIT AI. Questions can be sent to ofoegbuharreth@gmail.com.' },
+  { title: 'Using DOIT AI', body: 'You may use DOIT AI to organise personal goals and actions. You are responsible for information you enter, keeping your account secure, and using the service lawfully.' },
+  { title: 'AI guidance', body: 'AI-generated suggestions can be incomplete or incorrect. Treat them as planning assistance, use your judgment, and seek a qualified professional for financial, medical, legal, or other high-stakes decisions.' },
+  { title: 'Subscriptions and trials', body: 'On the web and in the installed web app, DOIT Pro and DOIT MAX subscriptions are processed by Stripe. A native Android release may instead use Google Play. The checkout screen shows the exact price, currency, billing interval, trial eligibility and renewal terms before you confirm. Subscriptions renew automatically until cancelled. A trial converts to the selected paid plan unless it is cancelled before the trial ends. Switching plans during a Stripe trial may end the trial and begin billing immediately; Stripe shows the effective charge before confirmation.' },
+  { title: 'Changing or cancelling a subscription', body: 'Use Profile, open your DOIT plan, and choose Manage subscription. Web subscriptions are changed or cancelled in Stripe; native Android subscriptions are managed by Google Play. A cancellation normally takes effect at the end of the current paid period unless the billing screen clearly states otherwise. Deleting your DOIT account does not by itself cancel a subscription, so cancel the subscription first.' },
+  { title: 'Payments and refunds', body: 'DOIT AI does not store full card details. Stripe or the relevant app store processes payment information. Except where consumer law requires otherwise, charges already incurred are non-refundable. If you believe a charge is incorrect, contact support promptly and include the account email and charge date, but never send card details or passwords.' },
+  { title: 'Plan limits and changes', body: 'Free, Pro and MAX plans have different limits for active goals, AI plans and adaptations. Current limits are shown before purchase and inside the product. We may improve or change features and reasonable usage limits. If a material change negatively affects an active paid subscription, we will provide notice where practical.' },
+  { title: 'Founding 50 programme', body: 'The Founding 50 programme recognises the first eligible DOIT accounts with a numbered profile badge. Referral counts are used for product-launch attribution. A founding badge has no cash value, does not guarantee free paid features, and cannot be sold or transferred.' },
+  { title: 'Acceptable use', body: 'Do not misuse the service, attempt unauthorised access, interfere with other users, upload unlawful content, or use DOIT AI to harm people or systems.' },
+  { title: 'Age requirement', body: 'You must be at least 13 to use DOIT AI. If you are under 18, use the service only with permission from a parent or legal guardian who agrees to these terms.' },
+  { title: 'Availability', body: 'DOIT AI is provided as available. We work to keep it reliable, but uninterrupted operation and any particular outcome are not guaranteed. We may change or discontinue features with reasonable notice where practical.' },
+  { title: 'Ending use', body: 'You may stop using DOIT AI or delete your account at any time. We may restrict access when needed to protect the service, comply with law, or address serious violations of these terms. Sections concerning payments, liability, acceptable use and legal obligations continue where their nature requires it.' },
+];
+
+export default function TermsScreen() {
+  return <LegalPage title="Terms of Use" intro="The basic rules for using DOIT AI and understanding the role of its planning suggestions." sections={sections} />;
+}

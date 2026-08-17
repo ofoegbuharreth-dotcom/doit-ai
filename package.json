@@ -1,0 +1,149 @@
+{
+  "name": "doit-ai",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web && node scripts/prepare-cloudflare-web.mjs",
+    "deploy:web": "npm run build:web && node scripts/verify-cloudflare-web.mjs && npx --yes wrangler@4.121.0 pages deploy dist --project-name=doit-ai",
+    "typecheck": "tsc --noEmit",
+    "lint": "expo lint",
+    "test": "vitest run",
+    "desktop:start": "electron desktop/main.cjs",
+    "desktop:dev": "npm run build:web && electron desktop/main.cjs",
+    "build:desktop": "npm run build:web && electron-builder --publish never",
+    "build:desktop:windows": "npm run build:web && electron-builder --win nsis --publish never",
+    "build:desktop:mac": "npm run build:web && electron-builder --mac dmg zip --publish never",
+    "build:android:preview": "eas build --platform android --profile preview",
+    "build:android:production": "eas build --platform android --profile production",
+    "submit:android": "eas submit --platform android --profile production"
+  },
+  "dependencies": {
+    "@expo-google-fonts/manrope": "^0.4.2",
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@sentry/react-native": "~7.2.0",
+    "@supabase/supabase-js": "^2.112.2",
+    "expo": "~54.0.0",
+    "expo-application": "~7.0.8",
+    "expo-calendar": "~15.0.8",
+    "expo-device": "~8.0.10",
+    "expo-file-system": "~19.0.23",
+    "expo-font": "~14.0.9",
+    "expo-haptics": "~15.0.8",
+    "expo-linear-gradient": "~15.0.8",
+    "expo-linking": "~8.0.12",
+    "expo-localization": "~17.0.9",
+    "expo-notifications": "~0.32.17",
+    "expo-router": "~6.0.24",
+    "expo-sharing": "~14.0.8",
+    "expo-speech-recognition": "^3.1.3",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "posthog-react-native": "^4.63.0",
+    "react": "19.1.0",
+    "react-dom": "^19.1.0",
+    "react-native": "0.81.5",
+    "react-native-android-widget": "^0.22.0",
+    "react-native-purchases": "^10.7.0",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-url-polyfill": "^4.0.0",
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "0.5.1",
+    "zod": "^4.4.3"
+  },
+  "build": {
+    "appId": "com.doitai.desktop",
+    "productName": "DOIT AI",
+    "asar": true,
+    "directories": {
+      "app": "desktop",
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "dist"
+      },
+      {
+        "from": "build/desktop-icon.png",
+        "to": "build/desktop-icon.png"
+      }
+    ],
+    "npmRebuild": false,
+    "protocols": [
+      {
+        "name": "DOIT AI",
+        "schemes": [
+          "doit"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/desktop-icon.ico",
+      "artifactName": "DOIT-AI-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "DOIT AI",
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/desktop-icon.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "DOIT-AI-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "DOIT AI ${version}"
+    }
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9.25.0",
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "electron@43.4.0": true
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "DOIT AI",
+    "slug": "doit-ai",
+    "version": "1.0.0",
+    "icon": "./assets/doit-logo.png",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "scheme": "doit",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.doitai.app"
+    },
+    "android": {
+      "package": "com.doitai.app",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/doit-logo.png",
+        "backgroundColor": "#090A0C"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/doit-logo-web.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-speech-recognition",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "DoitNextAction",
+              "label": "DOIT Next Action",
+              "description": "Your recommended DOIT action on the home screen",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#090A0C",
+          "image": "./assets/doit-logo.png",
+          "imageWidth": 160
+        }
+      ],
+      "@sentry/react-native",
+      "expo-localization",
+      "./plugins/with-android-release"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
