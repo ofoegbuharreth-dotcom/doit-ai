@@ -22,7 +22,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow = null;
 
 function rendererRoot() {
-  return app.isPackaged ? path.join(process.resourcesPath, 'dist') : path.join(app.getAppPath(), 'dist');
+  return app.isPackaged ? path.join(process.resourcesPath, 'dist') : path.join(__dirname, '..', 'dist');
 }
 
 function resolveRendererFile(requestUrl) {
@@ -62,7 +62,7 @@ function desktopRouteFromDeepLink(value) {
 }
 
 function createWindow() {
-  const icon = app.isPackaged ? path.join(process.resourcesPath, 'build', 'desktop-icon.png') : path.join(app.getAppPath(), 'build', 'desktop-icon.png');
+  const icon = app.isPackaged ? path.join(process.resourcesPath, 'build', 'desktop-icon.png') : path.join(__dirname, '..', 'build', 'desktop-icon.png');
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -83,6 +83,26 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error(`[renderer] failed to load ${url}: ${code} ${description}`);
+  });
+  mainWindow.webContents.on('console-message', (_event, details) => {
+    const message = typeof details === 'object' ? details.message : String(details);
+    console.error(`[renderer] ${message}`);
+  });
+  if (process.argv.includes('--doit-diagnostics')) {
+    mainWindow.webContents.on('did-finish-load', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const state = await mainWindow?.webContents.executeJavaScript(`JSON.stringify({
+        url: location.href,
+        title: document.title,
+        bodyText: document.body?.innerText?.slice(0, 300),
+        rootChildren: document.getElementById('root')?.childElementCount,
+        fontStatus: document.fonts?.status
+      })`);
+      console.error(`[renderer-state] ${state}`);
+    });
+  }
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(APP_ORIGIN)) return { action: 'allow' };
     openExternal(url);

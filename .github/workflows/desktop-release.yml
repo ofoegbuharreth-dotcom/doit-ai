@@ -35,6 +35,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Validate desktop configuration
+        shell: bash
+        run: |
+          if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY in GitHub Actions secrets."
+            exit 1
+          fi
       - run: npm ci
       - run: npm ci
         working-directory: desktop

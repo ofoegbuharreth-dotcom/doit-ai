@@ -8,7 +8,7 @@ DOIT AI now ships as an Electron desktop application. Its interface is bundled i
 - macOS (run on a Mac): `npm run build:desktop:mac`
 - Launch the compiled interface for development: `npm run desktop:dev`
 
-Windows output is written to `release/DOIT-AI-Setup-<version>-x64.exe`. macOS produces Intel and Apple-silicon `.dmg` and `.zip` files in `release/`.
+Windows output is written to `release/DOIT-AI-Setup-<version>-x64.exe`. macOS produces universal Intel/Apple-silicon `.dmg` and `.zip` files in `release/`.
 
 ## Publish downloads
 
@@ -18,7 +18,7 @@ Set these values before rebuilding and deploying the website:
 
 ```env
 EXPO_PUBLIC_DESKTOP_WINDOWS_URL=https://github.com/OWNER/REPOSITORY/releases/latest/download/DOIT-AI-Setup-1.0.0-x64.exe
-EXPO_PUBLIC_DESKTOP_MAC_URL=https://github.com/OWNER/REPOSITORY/releases/latest/download/DOIT-AI-1.0.0-arm64.dmg
+EXPO_PUBLIC_DESKTOP_MAC_URL=https://github.com/OWNER/REPOSITORY/releases/latest/download/DOIT-AI-1.0.0-universal.dmg
 ```
 
 The website's `/download` page will then deliver the actual installers. Large installers should use GitHub Releases or object storage rather than Cloudflare Pages static files.
