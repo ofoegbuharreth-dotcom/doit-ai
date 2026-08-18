@@ -37,6 +37,10 @@ type SubscriptionRow = {
   provider?: string | null;
 };
 
+function isInstalledDesktop() {
+  return typeof window !== 'undefined' && Boolean(window.doitDesktop?.isDesktop);
+}
+
 async function edgeFunctionMessage(error: unknown, fallback: string) {
   if (error && typeof error === 'object' && 'context' in error) {
     const context = (error as { context?: unknown }).context;
@@ -86,11 +90,12 @@ export async function loadStoreState(userId: string) {
 export async function purchaseStorePackage(_userId: string, packageId?: string) {
   try {
     if (!packageId || !/^(pro|max)_(monthly|annual)$/.test(packageId)) return { error: 'Choose a DOIT Pro or DOIT MAX plan.' };
-    const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>('stripe-billing', { body: { action: 'checkout', packageId } });
+    const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>('stripe-billing', { body: { action: 'checkout', packageId, desktop: isInstalledDesktop() } });
     if (error) throw new Error(await edgeFunctionMessage(error, 'Stripe could not open checkout.'));
     if (data?.error) return { error: data.error };
     if (!data?.url) return { error: 'Stripe did not return a checkout link.' };
-    await Linking.openURL(data.url);
+    if (isInstalledDesktop()) await window.doitDesktop!.openExternal(data.url);
+    else await Linking.openURL(data.url);
     return { product: packageId, redirected: true };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Stripe could not open checkout.' };
@@ -106,7 +111,7 @@ export async function restoreStorePurchases(userId: string): Promise<StoreEntitl
 }
 
 export async function openStoreManagement() {
-  const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string; cancelled?: boolean }>('stripe-billing', { body: { action: 'portal' } });
+  const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string; cancelled?: boolean }>('stripe-billing', { body: { action: 'portal', desktop: isInstalledDesktop() } });
   if (error) throw new Error(await edgeFunctionMessage(error, 'Could not open Stripe subscription management. Please refresh and try again.'));
   if (data?.error) throw new Error(data.error);
   if (data?.cancelled) return { cancelled: true };
@@ -116,7 +121,8 @@ export async function openStoreManagement() {
     // This tab-scoped marker lets the current authenticated session survive
     // only the Stripe round-trip; it disappears when the tab is closed.
     try { window.sessionStorage.setItem(stripeReturnSessionKey, 'true'); } catch { /* Continue without the convenience marker. */ }
-    window.location.assign(data.url);
+    if (isInstalledDesktop()) await window.doitDesktop!.openExternal(data.url);
+    else window.location.assign(data.url);
     return { cancelled: false };
   }
   await Linking.openURL(data.url);

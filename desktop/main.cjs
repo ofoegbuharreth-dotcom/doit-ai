@@ -22,6 +22,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow = null;
+let pendingDeepLink = process.argv.find((argument) => argument.startsWith(`${APP_SCHEME}://`)) ?? null;
 let updateState = {
   phase: 'idle',
   currentVersion: app.getVersion(),
@@ -199,7 +200,9 @@ function createWindow() {
     openExternal(url);
   });
 
-  void mainWindow.loadURL(`${APP_ORIGIN}/`);
+  const initialRoute = pendingDeepLink ? desktopRouteFromDeepLink(pendingDeepLink) : null;
+  pendingDeepLink = null;
+  void mainWindow.loadURL(initialRoute ?? `${APP_ORIGIN}/`);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -210,6 +213,7 @@ if (!gotLock) {
     const deepLink = argv.find((argument) => argument.startsWith(`${APP_SCHEME}://`));
     const route = deepLink ? desktopRouteFromDeepLink(deepLink) : null;
     if (route && mainWindow) void mainWindow.loadURL(route);
+    else if (deepLink) pendingDeepLink = deepLink;
     if (mainWindow?.isMinimized()) mainWindow.restore();
     mainWindow?.focus();
   });
@@ -260,6 +264,7 @@ app.on('open-url', (event, url) => {
   event.preventDefault();
   const route = desktopRouteFromDeepLink(url);
   if (route && mainWindow) void mainWindow.loadURL(route);
+  else pendingDeepLink = url;
 });
 
 app.on('window-all-closed', () => {

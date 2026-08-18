@@ -64,7 +64,12 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceKey);
     const body = await request.json().catch(() => ({}));
     const action = body?.action;
+    const desktop = body?.desktop === true;
     const ids = priceIds();
+
+    const appReturnUrl = (route: 'pro' | 'home', params: string) => desktop
+      ? `${(Deno.env.get('APP_URL') ?? 'https://doit-ai.pages.dev').replace(/\/$/, '')}/desktop-return?route=${route}&${params}`
+      : `${allowedAppUrl(request)}/${route}?${params}`;
 
     if (action === 'plans') {
       const entries = Object.entries(ids).filter((entry): entry is [keyof typeof ids, string] => Boolean(entry[1]));
@@ -141,7 +146,7 @@ Deno.serve(async (request) => {
         const stripeSubscription = await stripeRequest(`/subscriptions/${encodeURIComponent(subscription.provider_subscription_id)}`, undefined, 'GET');
         const itemId = stripeSubscription?.items?.data?.[0]?.id;
         if (!itemId) throw new Error('Stripe could not find the active subscription item.');
-        const appUrl = `${allowedAppUrl(request)}/pro?checkout=success`;
+        const appUrl = appReturnUrl('pro', 'checkout=success');
         const upgrade = await stripeRequest('/billing_portal/sessions', {
           customer: subscription.provider_customer_id,
           return_url: appUrl,
@@ -173,7 +178,8 @@ Deno.serve(async (request) => {
         if (saveError) throw saveError;
       }
 
-      const appUrl = allowedAppUrl(request);
+      const successUrl = appReturnUrl('pro', 'checkout=success&session_id={CHECKOUT_SESSION_ID}');
+      const cancelUrl = appReturnUrl('pro', 'checkout=cancelled');
       const trialEligible = Number(subscription?.trial_use_count ?? 0) < 2;
       const session = await stripeRequest('/checkout/sessions', {
         mode: 'subscription',
@@ -183,8 +189,8 @@ Deno.serve(async (request) => {
         'line_items[0][price]': priceId,
         'line_items[0][quantity]': 1,
         allow_promotion_codes: true,
-        success_url: `${appUrl}/pro?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/pro?checkout=cancelled`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         'metadata[user_id]': user.id,
         'metadata[doit_plan]': tier,
         'subscription_data[metadata][user_id]': user.id,
@@ -204,7 +210,7 @@ Deno.serve(async (request) => {
       const { error: syncError } = await admin.from('subscriptions').upsert(update, { onConflict: 'user_id' });
       if (syncError) throw syncError;
       if (update.cancel_at_period_end || update.status === 'cancelled') return json({ cancelled: true });
-      const homeUrl = `${allowedAppUrl(request)}/home?stripe_return=cancelled`;
+      const homeUrl = appReturnUrl('home', 'stripe_return=cancelled');
       const session = await stripeRequest('/billing_portal/sessions', {
         customer: subscription.provider_customer_id,
         return_url: homeUrl,

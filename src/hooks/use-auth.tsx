@@ -39,13 +39,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const rememberMe = await AsyncStorage.getItem(authRememberKey) === 'true';
         const initialUrl = await Linking.getInitialURL();
         let returningFromStripe = false;
+        const desktopExternalReturn = typeof window !== 'undefined'
+          && Boolean(window.doitDesktop?.isDesktop)
+          && Boolean(initialUrl && (/[?&]checkout=(?:success|cancelled)/.test(initialUrl) || /[?&]stripe_return=/.test(initialUrl)));
         if (typeof window !== 'undefined' && initialUrl?.includes('stripe_return=cancelled')) {
           try {
             returningFromStripe = window.sessionStorage.getItem(stripeReturnSessionKey) === 'true';
             window.sessionStorage.removeItem(stripeReturnSessionKey);
           } catch { /* Treat unavailable session storage as a normal fresh load. */ }
         }
-        if (!rememberMe && !isPasswordRecoveryUrl(initialUrl) && !returningFromStripe) {
+        if (!rememberMe && !isPasswordRecoveryUrl(initialUrl) && !returningFromStripe && !desktopExternalReturn) {
           await supabase.auth.signOut({ scope: 'local' });
           if (active) setUser(null);
         } else {

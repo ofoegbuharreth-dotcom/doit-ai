@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -7,14 +7,17 @@ import Animated, { FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withR
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { PlanReviewEditor } from '@/components/planning/PlanReviewEditor';
 import { Button, Card, Input, Screen, Text } from '@/components/ui';
-import { aiProvider, buildClarificationContext, isGoalPlanClarification, uniqueClarificationQuestions } from '@/services';
+import { aiProvider, buildClarificationContext, isGoalPlanClarification, markActivationPlanReady, uniqueClarificationQuestions } from '@/services';
+import { track } from '@/services/observability';
 import { useAppStore } from '@/stores';
 import { colors, radius, spacing } from '@/theme';
-import type { GoalPlanClarification } from '@/types';
+import type { GoalPlanClarification, GoalPlanResponse } from '@/types';
 
 const stages = ['Understanding your goal…', 'Choosing the right success measure…', 'Building specific milestones and actions…'];
 
 export default function AIPlanScreen() {
+  const { activation } = useLocalSearchParams<{ activation?: string }>();
+  const isActivation = activation === '1';
   const { draft, generatedPlan, setGeneratedPlan, startGeneratedGoal } = useAppStore();
   const [stage, setStage] = useState(0);
   const [error, setError] = useState('');
@@ -86,11 +89,23 @@ export default function AIPlanScreen() {
     </View>
   </Screen>;
 
-  const start = () => { const id = startGeneratedGoal(); if (id) router.replace({ pathname: '/goal/[id]', params: { id } }); };
+  const start = async () => {
+    const plan = isActivation ? withFiveMinuteStarter(generatedPlan) : generatedPlan;
+    const created = startGeneratedGoal(plan);
+    if (!created) return;
+    if (isActivation) {
+      await markActivationPlanReady(created.goalId, created.firstTaskId);
+      track('activation plan created', { milestone_count: plan.milestones.length, action_count: plan.todayTasks.length });
+      router.replace({ pathname: '/activation-action', params: { goalId: created.goalId, taskId: created.firstTaskId } } as never);
+      return;
+    }
+    router.replace({ pathname: '/goal/[id]', params: { id: created.goalId } });
+  };
   return <Screen scrollable contentContainerStyle={styles.screen}>
-    <ScreenHeader title="Your plan" />
+    <ScreenHeader title={isActivation ? 'Your first plan' : 'Your plan'} />
+    {isActivation ? <View style={styles.activationProgress}><View style={styles.activationProgressFill} /></View> : null}
     <Animated.View entering={FadeInDown.duration(400)} style={styles.heading}>
-      <Text variant="eyebrow" color="accent">HERE’S THE PLAN</Text>
+      <Text variant="eyebrow" color="accent">{isActivation ? 'STEP 2 OF 3 · REVIEW' : 'HERE’S THE PLAN'}</Text>
       <Text variant="title">{generatedPlan.goal.title}</Text>
       <Text color="secondary">{generatedPlan.goal.description}</Text>
     </Animated.View>
@@ -101,7 +116,7 @@ export default function AIPlanScreen() {
       {generatedPlan.todayTasks.map((task, index) => <Animated.View key={`${task.title}-${index}`} entering={FadeInDown.delay(450 + index * 90)} style={styles.task}><Ionicons name="square-outline" color={colors.textMuted} size={20} /><View style={styles.taskCopy}><Text variant="label">{task.title}</Text><Text variant="caption" color="secondary">{task.description}</Text><Text variant="caption" color="muted">{task.estimatedMinutes} min · {task.priority}</Text></View></Animated.View>)}
     </Card>
     <Card style={styles.insight}><Text variant="eyebrow" color="accent">DOIT INSIGHT</Text><Text>{generatedPlan.insight}</Text></Card>
-    <Button label="Start Goal" icon="arrow-forward" onPress={start} />
+    <Button label={isActivation ? 'Choose my 5-minute move' : 'Start Goal'} icon="arrow-forward" onPress={start} />
   </Screen>;
 }
 
@@ -124,4 +139,19 @@ const styles = StyleSheet.create({
   task: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
   taskCopy: { flex: 1, gap: spacing.xs },
   insight: { gap: spacing.sm },
+  activationProgress: { backgroundColor: colors.border, borderRadius: radius.pill, height: 5, overflow: 'hidden' },
+  activationProgressFill: { backgroundColor: colors.accent, height: '100%', width: '66%' },
 });
+
+function withFiveMinuteStarter(plan: GoalPlanResponse): GoalPlanResponse {
+  const first = plan.todayTasks[0];
+  if (!first || first.estimatedMinutes <= 5) return plan;
+  const starter = {
+    ...first,
+    title: `Start: ${first.title}`,
+    description: `${first.description} Work only until you have one visible starting point, then stop.`,
+    estimatedMinutes: 5,
+    priority: 'high' as const,
+  };
+  return { ...plan, todayTasks: [starter, ...plan.todayTasks] };
+}

@@ -5,13 +5,23 @@ import { supabase } from './client';
 
 // Keep auth emails independent from Metro's changing LAN URL. This route is
 // registered by the `doit` scheme in app.json and handled by Expo Router.
-export const emailVerificationRedirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
-  ? `${window.location.origin}/auth/callback`
-  : 'doit://auth/callback';
+const isInstalledDesktop = Platform.OS === 'web'
+  && typeof window !== 'undefined'
+  && Boolean(window.doitDesktop?.isDesktop);
 
-export const passwordRecoveryRedirectUrl = Platform.OS === 'web' && typeof window !== 'undefined'
-  ? `${window.location.origin}/auth/reset-password`
-  : 'doit://auth/reset-password';
+// Installed desktop builds must leave the email client through the registered
+// OS protocol. Browser users stay on the HTTPS origin they started from.
+export const emailVerificationRedirectUrl = isInstalledDesktop
+  ? 'doit://auth/callback'
+  : Platform.OS === 'web' && typeof window !== 'undefined'
+    ? `${window.location.origin}/auth/callback`
+    : 'doit://auth/callback';
+
+export const passwordRecoveryRedirectUrl = isInstalledDesktop
+  ? 'doit://auth/reset-password'
+  : Platform.OS === 'web' && typeof window !== 'undefined'
+    ? `${window.location.origin}/auth/reset-password`
+    : 'doit://auth/reset-password';
 
 export function isPasswordRecoveryUrl(url: string | null | undefined) {
   if (!url) return false;

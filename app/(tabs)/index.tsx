@@ -14,6 +14,7 @@ import { Button, Card, ProgressBar, Screen, SectionHeader, Text } from '@/compon
 import { useAuth, useSubscription } from '@/hooks';
 import { useAppStore } from '@/stores';
 import { confirmStripeCancellation } from '@/services/purchases';
+import { getFirstRunActivation, type FirstRunActivation } from '@/services';
 import { colors, radius, spacing } from '@/theme';
 import type { TaskStatus } from '@/types';
 import { completionStreak, greeting, taskProgress, today } from '@/utils';
@@ -30,6 +31,8 @@ export default function TodayScreen() {
   const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const [cancellationNotice, setCancellationNotice] = useState<'sending' | 'sent' | 'error'>();
+  const [activation, setActivation] = useState<FirstRunActivation | null>(null);
+  useEffect(() => { getFirstRunActivation().then((value) => setActivation(value?.phase === 'plan_ready' ? value : null)).catch(() => undefined); }, []);
   useEffect(() => { if (!celebrating) return; const timer = setTimeout(() => setCelebrating(false), 1750); return () => clearTimeout(timer); }, [celebrating]);
   useEffect(() => {
     if (params.stripe_return !== 'cancelled') return;
@@ -69,6 +72,7 @@ export default function TodayScreen() {
       {cancellationNotice ? <Card style={styles.cancellationNotice}><Ionicons name={cancellationNotice === 'sent' ? 'checkmark-circle' : cancellationNotice === 'error' ? 'alert-circle' : 'mail-outline'} color={cancellationNotice === 'error' ? colors.danger : cancellationNotice === 'sent' ? colors.success : colors.accent} size={22} /><View style={styles.cancellationCopy}><Text variant="label">{cancellationNotice === 'sending' ? 'Confirming your cancellation…' : cancellationNotice === 'sent' ? 'Cancellation confirmed' : 'Cancellation confirmed, but the email needs another try'}</Text><Text variant="caption" color="secondary">{cancellationNotice === 'sending' ? 'DOIT is checking Stripe and sending the cancellation email.' : cancellationNotice === 'sent' ? 'The owner notification was sent successfully.' : 'Open Manage subscription and return here to retry, or contact support.'}</Text></View></Card> : null}
       {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Try again" variant="secondary" onPress={refreshWorkspace} /></Card> : null}
       {dailyPlanError ? <Card style={styles.syncError}><Text variant="label" color="danger">Today’s plan needs another try</Text><Text variant="caption" color="secondary">{dailyPlanError}</Text><Button label="Build today’s plan" variant="secondary" onPress={() => ensureTodayPlan(true)} /></Card> : null}
+      {activation?.goalId ? <Card style={styles.activationCard}><View style={styles.activationIcon}><Ionicons name="rocket" color={colors.accent} size={22} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">FINISH YOUR 5-MINUTE SETUP</Text><Text variant="heading">Your first move is waiting.</Text><Text variant="caption" color="secondary">Complete it now to turn your new goal into real momentum.</Text></View><Button label="Finish setup" icon="arrow-forward" onPress={() => router.push(`/activation-action?goalId=${encodeURIComponent(activation.goalId!)}${activation.taskId ? `&taskId=${encodeURIComponent(activation.taskId)}` : ''}`)} /></Card> : null}
       <View style={styles.stats}>
         <Card style={styles.stat}><Ionicons name="flame" color={colors.warning} size={22} /><Text variant="heading">{streak}</Text><Text variant="caption" color="muted">day streak</Text></Card>
         <Card style={styles.statWide}><View style={styles.overviewTop}><Text variant="eyebrow" color="accent">DAILY PROGRESS</Text><Text variant="label" color="accent">{progress}%</Text></View><ProgressBar progress={progress} height={8} /><Text variant="caption" color="muted">{syncing ? 'Syncing…' : `${done} of ${todayTasks.length} complete`}</Text></Card>
@@ -117,6 +121,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: spacing.sm }, stat: { alignItems: 'center', gap: spacing.xxs, justifyContent: 'center', minWidth: 96 }, statWide: { flex: 1, gap: spacing.sm }, overviewTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   focusCard: { backgroundColor: colors.surfaceElevated, borderColor: colors.accent, gap: spacing.md }, focusIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, meta: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   planning: { alignItems: 'center', flexDirection: 'row', gap: spacing.md }, planningCopy: { flex: 1, gap: spacing.xs }, cancellationNotice: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, cancellationCopy: { flex: 1, gap: spacing.xxs },
+  activationCard: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, gap: spacing.md }, activationIcon: { alignItems: 'center', backgroundColor: colors.background, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, activationCopy: { gap: spacing.xs },
   focusActions: { flexDirection: 'row', gap: spacing.xs }, smallAction: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, gap: spacing.xxs, justifyContent: 'center', minHeight: 62, padding: spacing.xs }, pressed: { opacity: 0.7 }, disabled: { opacity: 0.45 },
   list: { gap: spacing.sm }, empty: { gap: spacing.xs }, checkedIn: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' }, bottomSpace: { height: 84 },
   celebration: { alignItems: 'center', alignSelf: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.accentBorder, borderRadius: radius.lg, borderWidth: 1, bottom: 104, flexDirection: 'row', gap: spacing.sm, maxWidth: 380, paddingHorizontal: spacing.md, paddingVertical: 12, position: 'absolute', width: '88%' }, celebrationIcon: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.pill, height: 38, justifyContent: 'center', width: 38 }, celebrationCopy: { flex: 1, gap: 1 },

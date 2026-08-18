@@ -6,7 +6,7 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'rea
 import { Button, Input, PressableScale, Screen, Text } from '@/components/ui';
 import { useAuth } from '@/hooks';
 import { track } from '@/services/observability';
-import { getPendingReferralCode } from '@/services';
+import { getFirstRunActivation, getPendingReferralCode } from '@/services';
 import { colors, radius, spacing } from '@/theme';
 
 export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
@@ -34,7 +34,8 @@ export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
     }
     if (result.error) return setError(result.error);
     track(mode === 'login' ? 'account signed in' : 'account signed up');
-    router.replace(mode === 'signup' ? '/create-goal' : '/(tabs)/home');
+    const activation = await getFirstRunActivation();
+    router.replace((activation && activation.phase !== 'completed' ? '/activation' : mode === 'signup' ? '/create-goal' : '/(tabs)/home') as never);
   };
 
   return (

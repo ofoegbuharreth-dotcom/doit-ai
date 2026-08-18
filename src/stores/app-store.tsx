@@ -37,7 +37,7 @@ interface AppStore {
   ensureTodayPlan: (force?: boolean) => Promise<Task[]>;
   setDraft: (draft: GoalDraft | null) => void;
   setGeneratedPlan: (plan: GoalPlanResponse | null) => void;
-  startGeneratedGoal: () => string | undefined;
+  startGeneratedGoal: (planOverride?: GoalPlanResponse) => { goalId: string; firstTaskId?: string } | undefined;
   updateTask: (taskId: string, status: TaskStatus) => void;
   completeFocusedTask: (taskId: string, actualMinutes: number) => Promise<{ error?: string }>;
   replaceTask: (taskId: string, reason?: string) => Promise<void>;
@@ -215,29 +215,30 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     }
   }, [addActivity, commitMutation, tasks]);
 
-  const startGeneratedGoal = useCallback(() => {
-    if (!generatedPlan || !draft) return undefined;
+  const startGeneratedGoal = useCallback((planOverride?: GoalPlanResponse) => {
+    const plan = planOverride ?? generatedPlan;
+    if (!plan || !draft) return undefined;
     const id = makeId();
     const now = new Date().toISOString();
-    const goal: Goal = { id, userId: user?.id ?? demoUserId, title: generatedPlan.goal.title, description: generatedPlan.goal.description, status: 'active', targetValue: generatedPlan.goal.targetValue, currentValue: Number(draft.currentProgress) || 0, unit: generatedPlan.goal.unit, targetDate: draft.targetDate, createdAt: now, updatedAt: now };
+    const goal: Goal = { id, userId: user?.id ?? demoUserId, title: plan.goal.title, description: plan.goal.description, status: 'active', targetValue: plan.goal.targetValue, currentValue: Number(draft.currentProgress) || 0, unit: plan.goal.unit, targetDate: draft.targetDate, createdAt: now, updatedAt: now };
     setGoals((current) => [goal, ...current]);
     const targetTime = draft.targetDate ? new Date(`${draft.targetDate}T12:00:00`).getTime() : undefined;
     const startTime = Date.now();
-    const newMilestones = generatedPlan.milestones.map((item, index): Milestone => {
+    const newMilestones = plan.milestones.map((item, index): Milestone => {
       const evenDate = targetTime && targetTime > startTime
-        ? new Date(startTime + ((targetTime - startTime) * (index + 1)) / generatedPlan.milestones.length).toISOString().slice(0, 10)
+        ? new Date(startTime + ((targetTime - startTime) * (index + 1)) / plan.milestones.length).toISOString().slice(0, 10)
         : new Date(startTime + (index + 1) * 7 * 86400000).toISOString().slice(0, 10);
       return { ...item, id: makeId(), goalId: id, sortOrder: index, status: index === 0 ? 'current' : 'pending', dueDate: evenDate };
     });
-    const newTasks = generatedPlan.todayTasks.map((item): Task => ({ ...item, id: makeId(), goalId: id, userId: user?.id ?? demoUserId, scheduledDate: today(), status: 'pending', aiGenerated: true, createdAt: now, moveCount: 0 }));
+    const newTasks = plan.todayTasks.map((item): Task => ({ ...item, id: makeId(), goalId: id, userId: user?.id ?? demoUserId, scheduledDate: today(), status: 'pending', aiGenerated: true, createdAt: now, moveCount: 0 }));
     setMilestones((current) => [...current, ...newMilestones]);
     setTasks((current) => [...newTasks, ...current]);
-    if (isSupabaseConfigured) void commitMutation({ type: 'goal_plan', goal, plan: generatedPlan, tasks: newTasks, milestones: newMilestones });
+    if (isSupabaseConfigured) void commitMutation({ type: 'goal_plan', goal, plan, tasks: newTasks, milestones: newMilestones });
     addActivity({ goalId: id, type: 'goal_created', title: `Goal created: ${goal.title}`, detail: 'Your first actions are ready' });
     track('goal created', { milestone_count: newMilestones.length, action_count: newTasks.length, has_deadline: Boolean(draft.targetDate) });
     setDraft(null);
     setGeneratedPlan(null);
-    return id;
+    return { goalId: id, firstTaskId: newTasks[0]?.id };
   }, [addActivity, commitMutation, draft, generatedPlan, user?.id]);
 
   const replaceTask = useCallback(async (taskId: string, reason?: string) => {

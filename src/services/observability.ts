@@ -36,6 +36,7 @@ export type AnalyticsEvent =
   | 'account signed up' | 'account signed in' | 'account signed out'
   | 'password reset requested' | 'password reset completed'
   | 'onboarding viewed' | 'onboarding completed'
+  | 'activation started' | 'activation goal submitted' | 'activation plan created' | 'activation first action started' | 'activation completed' | 'activation skipped'
   | 'goal created' | 'focus started' | 'focus completed' | 'product feedback submitted'
   | 'paywall viewed' | 'subscription purchased' | 'subscription restored' | 'subscription management opened';
 

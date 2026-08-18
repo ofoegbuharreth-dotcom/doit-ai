@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Screen, Text } from '@/components/ui';
-import { completeEmailVerification } from '@/services';
+import { completeEmailVerification, getFirstRunActivation } from '@/services';
 import { colors, radius, spacing } from '@/theme';
 
 type VerificationState = 'working' | 'success' | 'error';
@@ -14,6 +14,11 @@ export default function AuthCallbackScreen() {
   const url = Linking.useLinkingURL();
   const [state, setState] = useState<VerificationState>('working');
   const [error, setError] = useState('');
+
+  const continueAfterVerification = async () => {
+    const activation = await getFirstRunActivation();
+    router.replace((activation && activation.phase !== 'completed' ? '/activation' : '/create-goal') as never);
+  };
 
   useEffect(() => {
     if (!url) return;
@@ -50,7 +55,7 @@ export default function AuthCallbackScreen() {
           {state === 'working' ? 'Just a moment while we secure your account.' : state === 'success' ? 'Your account is ready. You can start building your goals.' : error}
         </Text>
       </View>
-      {state === 'success' ? <Button label="Create my first goal" onPress={() => router.replace('/create-goal')} /> : null}
+      {state === 'success' ? <Button label="Continue my setup" onPress={continueAfterVerification} /> : null}
       {state === 'error' ? <Button label="Return to log in" onPress={() => router.replace('/(auth)/login')} /> : null}
     </Screen>
   );

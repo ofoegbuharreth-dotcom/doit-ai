@@ -37,7 +37,7 @@ function sendSentryEvent(error: unknown, context?: Record<string, unknown>) {
     platform: 'javascript',
     level: 'error',
     environment: 'production',
-    release: 'doit-ai-web@1.1.2',
+    release: 'doit-ai-web@1.2.0',
     user: telemetryUserId ? { id: telemetryUserId } : undefined,
     exception: { values: [{ type: normalised.name || 'Error', value: normalised.message }] },
     extra: { stack: normalised.stack?.slice(0, 12000), ...context },
@@ -76,6 +76,7 @@ export type AnalyticsEvent =
   | 'account signed up' | 'account signed in' | 'account signed out'
   | 'password reset requested' | 'password reset completed'
   | 'onboarding viewed' | 'onboarding completed'
+  | 'activation started' | 'activation goal submitted' | 'activation plan created' | 'activation first action started' | 'activation completed' | 'activation skipped'
   | 'goal created' | 'focus started' | 'focus completed' | 'product feedback submitted'
   | 'paywall viewed' | 'subscription purchased' | 'subscription restored' | 'subscription management opened';
 
