@@ -1,8 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useDesktopUpdate } from '@/hooks';
+import { parseDesktopReleaseNotes } from '@/services/release-notes';
 import { colors, radius, spacing } from '@/theme';
 import { Text } from '@/components/ui';
 
@@ -28,6 +31,7 @@ export function DesktopReliability() {
     && dismissedVersion !== state.availableVersion;
   const downloading = state.phase === 'downloading';
   const downloaded = state.phase === 'downloaded';
+  const notes = parseDesktopReleaseNotes(state.releaseNotes);
 
   return <>
     {!online ? <View accessibilityRole="alert" style={styles.offline}>
@@ -37,12 +41,13 @@ export function DesktopReliability() {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !downloading && setDismissedVersion(state.availableVersion)}>
       <View style={styles.overlay}>
         <Pressable disabled={downloading} style={StyleSheet.absoluteFill} onPress={() => setDismissedVersion(state.availableVersion)} />
-        <View accessibilityViewIsModal style={styles.dialog}>
+        <Animated.View accessibilityViewIsModal entering={FadeInDown.duration(260).springify().damping(22)} style={styles.dialog}>
           <View style={styles.headingRow}>
             <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-up'} color={colors.onAccent} size={23} /></View>
             <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready when you are.' : `Version ${state.availableVersion ?? ''} is ready.`}</Text></View>
           </View>
-          <Text color="secondary">{downloaded ? 'Restart DOIT to finish installing the update. Your current work is already saved.' : 'Get the newest improvements, fixes, and reliability upgrades without downloading another installer.'}</Text>
+          <Text color="secondary">{downloaded ? 'Restart DOIT to finish installing the update. Your current work is already saved.' : notes.summary}</Text>
+          {notes.highlights.length ? <View style={styles.notes}><Text variant="eyebrow" color="accent">WHAT THIS UPDATE INCLUDES</Text>{notes.highlights.map((highlight) => <View key={highlight} style={styles.note}><View style={styles.noteIcon}><Ionicons name="checkmark" color={colors.accent} size={13} /></View><Text variant="caption" style={styles.flex}>{highlight}</Text></View>)}</View> : null}
           {downloading ? <View style={styles.progressBlock}>
             <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${state.percent ?? 0}%` }]} /></View>
             <Text variant="caption" color="secondary">Downloading securely · {state.percent ?? 0}%</Text>
@@ -52,7 +57,8 @@ export function DesktopReliability() {
             <Text variant="label" style={styles.primaryText}>{downloaded ? 'Restart and update' : downloading ? 'Downloading…' : 'Download update'}</Text>
           </Pressable>
           {!downloading ? <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Not now'}</Text></Pressable> : null}
-        </View>
+          {!downloading ? <Pressable onPress={() => { setDismissedVersion(state.availableVersion); router.push('/version-logs' as never); }} style={styles.logs}><Ionicons name="newspaper-outline" color={colors.textMuted} size={16} /><Text variant="caption" color="muted">View all version logs</Text></Pressable> : null}
+        </Animated.View>
       </View>
     </Modal>
   </>;
@@ -69,8 +75,10 @@ const styles = StyleSheet.create({
   progressBlock: { gap: spacing.xs },
   progressTrack: { backgroundColor: colors.border, borderRadius: radius.pill, height: 8, overflow: 'hidden' },
   progressFill: { backgroundColor: colors.accent, borderRadius: radius.pill, height: '100%' },
+  notes: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md }, note: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, noteIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, height: 23, justifyContent: 'center', width: 23 },
   primary: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', minHeight: 54, paddingHorizontal: spacing.lg },
   primaryText: { color: colors.onAccent },
   disabled: { opacity: 0.72 },
   later: { alignItems: 'center', justifyContent: 'center', minHeight: 42 },
+  logs: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs, justifyContent: 'center', minHeight: 34 },
 });

@@ -66,6 +66,11 @@ function updateSupported() {
   return app.isPackaged && ['win32', 'darwin'].includes(process.platform);
 }
 
+function normaliseReleaseNotes(value) {
+  if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? item : item?.note ?? '').filter(Boolean).join('\n');
+  return typeof value === 'string' ? value : undefined;
+}
+
 async function checkForUpdates() {
   if (!updateSupported()) {
     return publishUpdateState({
@@ -88,10 +93,10 @@ function configureUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.on('checking-for-update', () => publishUpdateState({ phase: 'checking', message: undefined }));
-  autoUpdater.on('update-available', (info) => publishUpdateState({ phase: 'available', availableVersion: info.version, percent: 0, message: undefined }));
+  autoUpdater.on('update-available', (info) => publishUpdateState({ phase: 'available', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes), percent: 0, message: undefined }));
   autoUpdater.on('update-not-available', () => publishUpdateState({ phase: 'up-to-date', availableVersion: undefined, percent: undefined, message: 'You have the newest version of DOIT AI.' }));
   autoUpdater.on('download-progress', (progress) => publishUpdateState({ phase: 'downloading', percent: Math.max(0, Math.min(100, Math.round(progress.percent))), message: undefined }));
-  autoUpdater.on('update-downloaded', (info) => publishUpdateState({ phase: 'downloaded', availableVersion: info.version, percent: 100, message: 'The update is ready to install.' }));
+  autoUpdater.on('update-downloaded', (info) => publishUpdateState({ phase: 'downloaded', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes) ?? updateState.releaseNotes, percent: 100, message: 'The update is ready to install.' }));
   autoUpdater.on('error', (error) => {
     captureDesktopError(error, 'auto_updater');
     publishUpdateState({ phase: 'error', message: 'The update could not be completed. Your current version is still safe to use.' });

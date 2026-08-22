@@ -12,6 +12,7 @@ import { TaskCard } from '@/components/tasks/TaskCard';
 import { Button, Card, Input, Screen, SectionHeader, Text } from '@/components/ui';
 import { useSubscription } from '@/hooks';
 import { getGoalHealth } from '@/services';
+import { track } from '@/services/observability';
 import { useAppStore } from '@/stores';
 import { colors, radius, spacing } from '@/theme';
 import type { GoalProgressEntry } from '@/types';
@@ -47,6 +48,7 @@ export default function GoalDetailScreen() {
   return <><Screen scrollable contentContainerStyle={styles.screen}>
     <ScreenHeader title="Goal" onBack={() => router.replace('/(tabs)/goals')} action={<Pressable accessibilityLabel="Edit goal" onPress={() => setEditing(true)} style={styles.edit}><Ionicons name="create-outline" size={20} color={colors.textPrimary} /></Pressable>} />
     <GoalCard goal={goal} milestones={goalMilestones} tasks={todayTasks} />
+    <Button label="Create share card" icon="images-outline" variant="secondary" onPress={() => { track('share_card_opened', { plan: isMax ? 'max' : isPro ? 'pro' : 'free' }); router.push(`/share-plan/${goal.id}` as never); }} />
     {health.level !== 'healthy' ? <Card style={[styles.health, health.level === 'at-risk' ? styles.healthRisk : styles.healthWatch]}><Ionicons name={health.level === 'at-risk' ? 'warning' : 'pulse'} color={health.level === 'at-risk' ? colors.danger : colors.warning} size={22} /><View style={styles.flex}><Text variant="label" color={health.level === 'at-risk' ? 'danger' : 'secondary'}>{health.title}</Text><Text variant="caption" color="secondary">{health.message}</Text></View></Card> : null}
     <Button label="Log real progress" icon="trending-up" onPress={() => { setEditingProgress(undefined); setLoggingProgress(true); }} />
     {goal.targetDate ? <Card style={styles.deadline}><View><Text variant="eyebrow" color="accent">DEADLINE</Text><Text variant="heading">{formatShortDate(goal.targetDate)}</Text></View><Ionicons name="calendar" color={colors.accent} size={25} /></Card> : null}

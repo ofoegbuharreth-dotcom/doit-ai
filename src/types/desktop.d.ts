@@ -9,6 +9,7 @@ declare global {
     availableVersion?: string;
     percent?: number;
     message?: string;
+    releaseNotes?: string;
   }
 
   interface Window {

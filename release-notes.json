@@ -1,0 +1,76 @@
+[
+  {
+    "version": "1.2.4",
+    "date": "2026-08-22",
+    "title": "Plans worth sharing",
+    "summary": "Turn a DOIT goal into a polished social-ready card, and see exactly what changes in every desktop update.",
+    "highlights": [
+      "Shareable Plan Cards for DOIT Pro and MAX",
+      "Square, vertical, and landscape PNG exports",
+      "Custom desktop update notes and an in-app Version Logs page"
+    ]
+  },
+  {
+    "version": "1.2.3",
+    "date": "2026-08-22",
+    "title": "A clearer Coach lineup",
+    "summary": "DOIT Coach is now a focused Pro and MAX experience, with MAX adding intelligence across every active goal.",
+    "highlights": ["Conversational Coach for Pro", "Cross-goal MAX Coach", "Clean Free upgrade experience"]
+  },
+  {
+    "version": "1.2.2",
+    "date": "2026-08-22",
+    "title": "The complete DOIT MAX system",
+    "summary": "MAX now prioritises across goals, forecasts deadlines, detects overload, and proposes reviewable plan rebuilds.",
+    "highlights": ["Cross-goal priority intelligence", "Advanced weekly forecasts", "Goal dependencies and richer exports"]
+  },
+  {
+    "version": "1.2.1",
+    "date": "2026-08-22",
+    "title": "Safer billing and smarter planning",
+    "summary": "The standard planner became more useful and Stripe cancellation events now safely handle deleted accounts.",
+    "highlights": ["Improved built-in goal planner", "Hardened live Stripe webhook", "Latest desktop downloads stay current"]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-08-21",
+    "title": "A stronger first five minutes",
+    "summary": "New users can create a quality goal and complete their first real action faster, with desktop deep links returning to DOIT.",
+    "highlights": ["First-run activation journey", "Desktop authentication deep links", "Automatic update foundation"]
+  },
+  {
+    "version": "1.1.2",
+    "date": "2026-08-20",
+    "title": "DOIT on every Mac",
+    "summary": "The desktop release now supports both Intel and Apple silicon Macs.",
+    "highlights": ["Universal macOS build", "DMG and ZIP release assets"]
+  },
+  {
+    "version": "1.1.1",
+    "date": "2026-08-20",
+    "title": "Better release reliability",
+    "summary": "Desktop crash reporting configuration and recovery handling were strengthened.",
+    "highlights": ["Desktop crash diagnostics", "Safer renderer recovery"]
+  },
+  {
+    "version": "1.1.0",
+    "date": "2026-08-19",
+    "title": "Updates without reinstalling",
+    "summary": "DOIT Desktop gained automatic update checks, background downloads, and restart-to-install support.",
+    "highlights": ["Automatic desktop updates", "Crash recovery", "Offline reliability"]
+  },
+  {
+    "version": "1.0.1",
+    "date": "2026-08-18",
+    "title": "Desktop launch fix",
+    "summary": "Fixed the blank window that could appear when launching the installed desktop app.",
+    "highlights": ["Reliable packaged renderer loading", "Improved startup recovery"]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-08-18",
+    "title": "DOIT AI Desktop arrives",
+    "summary": "The first dedicated Windows and macOS edition of DOIT AI.",
+    "highlights": ["Native desktop window", "Windows installer", "macOS installer"]
+  }
+]

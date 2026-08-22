@@ -118,6 +118,7 @@ export default function ProfileScreen() {
       </Card>
       <View style={styles.settingsGroup}>
         <Setting icon="chatbubble-ellipses-outline" title="Help shape DOIT" detail="Send an idea, report a bug, or tell us what works" onPress={() => router.push('/feedback')} />
+        {Platform.OS === 'web' ? <Setting icon="newspaper-outline" title="Version logs" detail="See what changed in every recent DOIT update" onPress={() => router.push('/version-logs')} /> : null}
         {Platform.OS !== 'web' ? <Setting icon="notifications-outline" title="Notifications" detail="Daily action and evening check-in times" onPress={() => router.push('/settings/notifications')} /> : null}
         <Setting icon="calendar-outline" title="Calendar & time blocks" detail={Platform.OS === 'web' ? 'Download upcoming actions as calendar events' : 'Turn upcoming actions into calendar events'} onPress={() => router.push('/calendar')} />
         {Platform.OS === 'android' ? <Setting icon="apps-outline" title="Home-screen widget" detail="Long-press your Android home screen, tap Widgets, then choose DOIT AI" complete /> : null}

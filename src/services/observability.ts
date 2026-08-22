@@ -38,7 +38,8 @@ export type AnalyticsEvent =
   | 'onboarding viewed' | 'onboarding completed'
   | 'activation started' | 'activation goal submitted' | 'activation plan created' | 'activation first action started' | 'activation completed' | 'activation skipped'
   | 'goal created' | 'focus started' | 'focus completed' | 'product feedback submitted'
-  | 'paywall viewed' | 'subscription purchased' | 'subscription restored' | 'subscription management opened';
+  | 'paywall viewed' | 'subscription purchased' | 'subscription restored' | 'subscription management opened'
+  | 'share_card_opened' | 'share_card_exported' | 'share_card_shared' | 'share_card_downloaded' | 'share_card_copied' | 'share_card_upgrade_clicked';
 
 export function track(event: AnalyticsEvent, properties?: Record<string, string | number | boolean | null | undefined>) {
   const cleanProperties = properties
