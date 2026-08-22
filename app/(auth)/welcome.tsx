@@ -56,7 +56,7 @@ export default function WelcomeScreen() {
     <Animated.View key={page} entering={FadeInRight.duration(320)} exiting={FadeOutLeft.duration(160)} style={styles.main}>
       {page === 0 ? <>
         <View style={styles.timeBadge}><Ionicons name="time-outline" color={colors.accent} size={17} /><Text variant="label" color="accent">YOUR FIRST WIN IN 5 MINUTES</Text></View>
-        <View style={styles.copy}><Text variant="display">Leave with a plan.\nStart with one move.</Text><Text variant="body" color="secondary">Tell DOIT what matters. We’ll turn it into a quality goal and guide you through one small action before setup is over.</Text></View>
+        <View style={styles.copy}><Text variant="display">Leave with a plan.{`\n`}Start with one move.</Text><Text variant="body" color="secondary">Tell DOIT what matters. We’ll turn it into a quality goal and guide you through one small action before setup is over.</Text></View>
         <Card style={styles.promise}>
           {['Name the outcome', 'Review a useful plan', 'Complete a 5-minute action'].map((item, index) => <View key={item} style={styles.promiseRow}><View style={styles.step}><Text variant="label" color="accent">{index + 1}</Text></View><Text variant="label" style={styles.flex}>{item}</Text><Text variant="caption" color="muted">{index === 0 ? '1 min' : '2 min'}</Text></View>)}
         </Card>

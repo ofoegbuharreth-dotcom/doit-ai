@@ -7,3 +7,4 @@ export * from './backup';
 export * from './sync';
 export * from './owner';
 export * from './activation';
+export * from './desktop-release';

@@ -1,13 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Text } from '@/components/ui';
 import { doitLogo } from '@/constants/logo';
+import { loadLatestDesktopRelease, type DesktopRelease } from '@/services';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-const WINDOWS_URL = process.env.EXPO_PUBLIC_DESKTOP_WINDOWS_URL?.trim();
-const MAC_URL = process.env.EXPO_PUBLIC_DESKTOP_MAC_URL?.trim();
+const FALLBACK_RELEASE: DesktopRelease = {
+  version: 'Latest',
+  windowsUrl: process.env.EXPO_PUBLIC_DESKTOP_WINDOWS_URL?.trim(),
+  macUrl: process.env.EXPO_PUBLIC_DESKTOP_MAC_URL?.trim(),
+};
 
 function currentPlatform() {
   if (typeof navigator === 'undefined') return 'windows';
@@ -28,7 +33,14 @@ export default function DownloadPage() {
   const { width } = useWindowDimensions();
   const compact = width < 820;
   const platform = currentPlatform();
-  const primaryUrl = platform === 'macos' ? MAC_URL : WINDOWS_URL;
+  const [release, setRelease] = useState(FALLBACK_RELEASE);
+  const [checkingRelease, setCheckingRelease] = useState(true);
+  useEffect(() => {
+    let active = true;
+    loadLatestDesktopRelease().then((latest) => { if (active) setRelease(latest); }).catch(() => undefined).finally(() => { if (active) setCheckingRelease(false); });
+    return () => { active = false; };
+  }, []);
+  const primaryUrl = platform === 'macos' ? release.macUrl : release.windowsUrl;
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -45,12 +57,12 @@ export default function DownloadPage() {
           <Pressable onPress={() => download(primaryUrl)} disabled={!primaryUrl || primaryUrl.includes('your-account')} style={[styles.primaryButton, (!primaryUrl || primaryUrl.includes('your-account')) && styles.disabled]}>
             <Ionicons name={platform === 'macos' ? 'logo-apple' : 'logo-windows'} size={22} color={colors.onAccent} /><Text variant="label" style={styles.onAccent}>{primaryUrl && !primaryUrl.includes('your-account') ? `Download for ${platform === 'macos' ? 'macOS' : 'Windows'}` : `${platform === 'macos' ? 'macOS' : 'Windows'} build coming soon`}</Text><Ionicons name="download-outline" size={20} color={colors.onAccent} />
           </Pressable>
-          <Text variant="caption" color="muted">Free installer · Native app window · One synced DOIT account</Text>
+          <Text variant="caption" color="muted">{checkingRelease ? 'Checking the newest release…' : `Latest release · Version ${release.version}`} · Native app window · One synced DOIT account</Text>
         </View>
 
         <View style={[styles.platformGrid, compact && styles.stack]}>
-          <PlatformCard icon="logo-windows" name="Windows" detail="Windows 10 or 11 · 64-bit" format=".exe installer" active={platform === 'windows'} url={WINDOWS_URL} />
-          <PlatformCard icon="logo-apple" name="macOS" detail="Intel and Apple silicon Macs" format=".dmg installer" active={platform === 'macos'} url={MAC_URL} />
+          <PlatformCard icon="logo-windows" name="Windows" detail="Windows 10 or 11 · 64-bit" format=".exe installer" active={platform === 'windows'} url={release.windowsUrl} version={release.version} checking={checkingRelease} />
+          <PlatformCard icon="logo-apple" name="macOS" detail="Intel and Apple silicon Macs" format=".dmg installer" active={platform === 'macos'} url={release.macUrl} version={release.version} checking={checkingRelease} />
         </View>
 
         <View style={[styles.benefits, compact && styles.stack]}>
@@ -68,13 +80,13 @@ export default function DownloadPage() {
   );
 }
 
-function PlatformCard({ active, icon, name, detail, format, url }: { active: boolean; icon: keyof typeof Ionicons.glyphMap; name: string; detail: string; format: string; url?: string }) {
+function PlatformCard({ active, icon, name, detail, format, url, version, checking }: { active: boolean; icon: keyof typeof Ionicons.glyphMap; name: string; detail: string; format: string; url?: string; version: string; checking: boolean }) {
   const available = Boolean(url && !url.includes('your-account'));
   return <View style={[styles.platformCard, active && styles.platformCardActive]}>
     <View style={styles.platformTop}><View style={styles.platformIcon}><Ionicons name={icon} size={27} color={colors.accent} /></View>{active ? <View style={styles.detected}><View style={styles.detectedDot} /><Text variant="caption" color="accent">RECOMMENDED</Text></View> : null}</View>
     <Text style={styles.platformName}>{name}</Text><Text color="secondary">{detail}</Text>
-    <View style={styles.fileRow}><Ionicons name="shield-checkmark-outline" size={19} color={colors.accent} /><Text variant="caption" color="secondary">{format} · Version 1.0.0</Text></View>
-    <Pressable onPress={() => download(url)} disabled={!available} style={[styles.cardButton, !available && styles.disabled]}><Ionicons name="download-outline" size={18} color={colors.onAccent} /><Text variant="label" style={styles.onAccent}>{available ? `Download ${name}` : `${name} build coming soon`}</Text></Pressable>
+    <View style={styles.fileRow}><Ionicons name="shield-checkmark-outline" size={19} color={colors.accent} /><Text variant="caption" color="secondary">{format} · {checking ? 'Checking latest version…' : `Version ${version}`}</Text></View>
+    <Pressable onPress={() => download(url)} disabled={!available || checking} style={[styles.cardButton, (!available || checking) && styles.disabled]}><Ionicons name="download-outline" size={18} color={colors.onAccent} /><Text variant="label" style={styles.onAccent}>{checking ? 'Finding latest installer…' : available ? `Download ${name}` : `${name} build coming soon`}</Text></Pressable>
   </View>;
 }
 
