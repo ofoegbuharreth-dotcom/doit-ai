@@ -17,7 +17,7 @@ const tierCopy = {
   pro: {
     name: 'DOIT Pro', eyebrow: 'FOR CONSISTENT BUILDERS', icon: 'diamond-outline' as const,
     headline: 'Serious momentum, without the noise.', detail: 'For people managing several real outcomes at once.',
-    features: ['20 active goals', '60 AI goal plans each month', '100 AI adaptations each month', 'Weekly AI Review', 'Full progress history'],
+    features: ['20 active goals', '60 AI goal plans each month', '100 AI adaptations each month', 'DOIT Coach', 'Weekly AI Review', 'Full progress history'],
   },
   max: {
     name: 'DOIT MAX', eyebrow: 'THE COMPLETE DOIT SYSTEM', icon: 'flash' as const,

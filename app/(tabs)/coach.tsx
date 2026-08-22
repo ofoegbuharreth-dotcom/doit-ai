@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { VoiceCaptureButton } from '@/components/voice/VoiceCaptureButton';
-import { Card, Screen, Text } from '@/components/ui';
+import { Button, Card, Screen, Text } from '@/components/ui';
 import { createActionPreview, type AgentAction, type AgentActionPreview, buildAgentContext, AgentResponseSchema } from '@/services/agent';
 import { aiProvider } from '@/services/ai';
 import { extractGoalRequest, interpretConversationTurn, type CoachQuestion } from '@/services/coach';
@@ -19,7 +19,7 @@ const starters = ['Make today easier', 'Move today’s actions to tomorrow', 'Wh
 
 export default function CoachScreen() {
   const store = useAppStore();
-  const { isMax } = useSubscription();
+  const { isPro, isMax } = useSubscription();
   const maxPortfolio = useMemo(() => buildMaxPortfolio(store.goals, store.tasks, store.milestones, store.focusSessions, store.taskDependencies, { calendarItems: store.calendarItems, weeklyReviews: store.weeklyReviews }), [store.calendarItems, store.focusSessions, store.goals, store.milestones, store.taskDependencies, store.tasks, store.weeklyReviews]);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'welcome', role: 'coach', text: 'Tell me what changed. I can adjust actions, deadlines, and time blocks with you.' }]);
   const [input, setInput] = useState('');
@@ -84,6 +84,19 @@ export default function CoachScreen() {
     setPending(null);
   };
 
+  if (!isPro) return <Screen contentContainerStyle={styles.lockedScreen}>
+    <Card style={styles.lockedHero}>
+      <View style={styles.lockedIcon}><Ionicons name="chatbubbles" color={colors.accent} size={27} /></View>
+      <Text variant="eyebrow" color="accent">DOIT COACH · PRO</Text>
+      <Text variant="title">Change your plan by talking to it.</Text>
+      <Text color="secondary">Coach can understand what changed, reschedule actions, update priorities, add work, and ask before applying major changes.</Text>
+      <View style={styles.lockedFeatures}>
+        {['Conversational plan changes', 'Action and deadline updates', 'Review changes before they apply', 'MAX adds intelligence across every goal'].map((label) => <View key={label} style={styles.lockedFeature}><Ionicons name="checkmark-circle" color={colors.accent} size={18} /><Text variant="caption" style={styles.flex}>{label}</Text></View>)}
+      </View>
+      <Button label="Explore DOIT Pro" icon="diamond" onPress={() => router.push('/pro')} />
+    </Card>
+  </Screen>;
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen contentContainerStyle={styles.screen}>
@@ -114,7 +127,7 @@ export default function CoachScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 }, screen: { flex: 1, gap: spacing.sm, paddingBottom: spacing.xs, paddingTop: spacing.sm }, header: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, headerCopy: { flex: 1, gap: 1, minWidth: 0 }, coachTitle: { fontSize: 22, lineHeight: 27 }, goalButton: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, flexShrink: 0, height: 38, justifyContent: 'center', width: 38 }, chat: { flex: 1 }, chatContent: { gap: spacing.xs, paddingBottom: spacing.sm, paddingTop: spacing.xs }, bubble: { borderRadius: 14, maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 10 }, messageText: { fontSize: 14, lineHeight: 20 }, userBubble: { alignSelf: 'flex-end', backgroundColor: colors.surfaceElevated, borderBottomRightRadius: 5, borderColor: colors.border, borderWidth: 1 }, coachBubble: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 5, borderColor: colors.border, borderWidth: 1 }, thinking: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, preview: { gap: spacing.sm, marginTop: spacing.xs }, previewHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, change: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, dot: { backgroundColor: colors.accent, borderRadius: 4, height: 7, width: 7 }, changeText: { flex: 1 }, previewActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }, smallButton: { alignItems: 'center', borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 44 }, cancel: { backgroundColor: colors.surfaceElevated }, apply: { backgroundColor: colors.accent, borderColor: colors.accent }, applyLabel: { color: colors.onAccent }, starterRail: { flexGrow: 0, maxHeight: 40 }, starters: { alignItems: 'center', gap: spacing.xs }, starter: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }, composer: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, borderWidth: 1, flexDirection: 'row', gap: 4, padding: 4 }, input: { color: colors.textPrimary, flex: 1, fontFamily: 'Manrope_500Medium', fontSize: 13, minHeight: 40, minWidth: 0, paddingHorizontal: spacing.xs }, send: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: 20, flexShrink: 0, height: 40, justifyContent: 'center', width: 40 }, sendDisabled: { opacity: 0.35 },
+  flex: { flex: 1 }, screen: { flex: 1, gap: spacing.sm, paddingBottom: spacing.xs, paddingTop: spacing.sm }, lockedScreen: { flex: 1, justifyContent: 'center', paddingVertical: spacing.xl }, lockedHero: { alignSelf: 'center', borderColor: colors.accentMuted, gap: spacing.md, maxWidth: 620, padding: spacing.xl, width: '100%' }, lockedIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.lg, height: 56, justifyContent: 'center', width: 56 }, lockedFeatures: { gap: spacing.sm }, lockedFeature: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, header: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, headerCopy: { flex: 1, gap: 1, minWidth: 0 }, coachTitle: { fontSize: 22, lineHeight: 27 }, goalButton: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, flexShrink: 0, height: 38, justifyContent: 'center', width: 38 }, chat: { flex: 1 }, chatContent: { gap: spacing.xs, paddingBottom: spacing.sm, paddingTop: spacing.xs }, bubble: { borderRadius: 14, maxWidth: '88%', paddingHorizontal: 12, paddingVertical: 10 }, messageText: { fontSize: 14, lineHeight: 20 }, userBubble: { alignSelf: 'flex-end', backgroundColor: colors.surfaceElevated, borderBottomRightRadius: 5, borderColor: colors.border, borderWidth: 1 }, coachBubble: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 5, borderColor: colors.border, borderWidth: 1 }, thinking: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, preview: { gap: spacing.sm, marginTop: spacing.xs }, previewHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, change: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, dot: { backgroundColor: colors.accent, borderRadius: 4, height: 7, width: 7 }, changeText: { flex: 1 }, previewActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }, smallButton: { alignItems: 'center', borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 44 }, cancel: { backgroundColor: colors.surfaceElevated }, apply: { backgroundColor: colors.accent, borderColor: colors.accent }, applyLabel: { color: colors.onAccent }, starterRail: { flexGrow: 0, maxHeight: 40 }, starters: { alignItems: 'center', gap: spacing.xs }, starter: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }, composer: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, borderWidth: 1, flexDirection: 'row', gap: 4, padding: 4 }, input: { color: colors.textPrimary, flex: 1, fontFamily: 'Manrope_500Medium', fontSize: 13, minHeight: 40, minWidth: 0, paddingHorizontal: spacing.xs }, send: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: 20, flexShrink: 0, height: 40, justifyContent: 'center', width: 40 }, sendDisabled: { opacity: 0.35 },
 });
 
 function describeAction(action: AgentAction, tasks: Task[], goals: Goal[]) {
