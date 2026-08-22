@@ -101,7 +101,7 @@ export function isRetryableSyncError(error: unknown) {
 
 export function subscribeToWorkspace(userId: string, onChange: () => void, onConnection: (connected: boolean) => void) {
   const channel = supabase.channel(`workspace-sync:${userId}:${makeId()}`);
-  const directTables = ['goals', 'tasks', 'goal_activity', 'daily_checkins', 'goal_progress_entries', 'focus_sessions'] as const;
+  const directTables = ['goals', 'tasks', 'goal_activity', 'daily_checkins', 'goal_progress_entries', 'focus_sessions', 'task_dependencies', 'calendar_items', 'weekly_reviews'] as const;
   directTables.forEach((table) => channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `user_id=eq.${userId}` }, onChange));
   channel.on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, onChange);
   channel.subscribe((status) => onConnection(status === 'SUBSCRIBED'));

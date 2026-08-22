@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { VoiceCaptureButton } from '@/components/voice/VoiceCaptureButton';
@@ -9,6 +9,8 @@ import { createActionPreview, type AgentAction, type AgentActionPreview, buildAg
 import { aiProvider } from '@/services/ai';
 import { extractGoalRequest, interpretConversationTurn, type CoachQuestion } from '@/services/coach';
 import { useAppStore } from '@/stores';
+import { useSubscription } from '@/hooks';
+import { answerMaxCoach, buildMaxPortfolio } from '@/services/max';
 import { colors, radius, spacing } from '@/theme';
 import type { Goal, Task } from '@/types';
 
@@ -17,6 +19,8 @@ const starters = ['Make today easier', 'Move today’s actions to tomorrow', 'Wh
 
 export default function CoachScreen() {
   const store = useAppStore();
+  const { isMax } = useSubscription();
+  const maxPortfolio = useMemo(() => buildMaxPortfolio(store.goals, store.tasks, store.milestones, store.focusSessions, store.taskDependencies, { calendarItems: store.calendarItems, weeklyReviews: store.weeklyReviews }), [store.calendarItems, store.focusSessions, store.goals, store.milestones, store.taskDependencies, store.tasks, store.weeklyReviews]);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'welcome', role: 'coach', text: 'Tell me what changed. I can adjust actions, deadlines, and time blocks with you.' }]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -34,6 +38,12 @@ export default function CoachScreen() {
     setInput(''); setError(''); setThinking(true);
     setMessages((current) => [...current, { id: `${Date.now()}-user`, role: 'user', text: request }]);
     try {
+      const maxAnswer = isMax ? answerMaxCoach(request, maxPortfolio) : undefined;
+      if (maxAnswer) {
+        setQuestion(null);
+        setMessages((current) => [...current, { id: `${Date.now()}-max`, role: 'coach', text: maxAnswer }]);
+        return;
+      }
       const goalPrompt = extractGoalRequest(request);
       if (goalPrompt) {
         setQuestion(null);
@@ -78,7 +88,7 @@ export default function CoachScreen() {
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen contentContainerStyle={styles.screen}>
         <View style={styles.header}>
-          <View style={styles.headerCopy}><Text variant="eyebrow" color="accent">DOIT COACH</Text><Text variant="title" style={styles.coachTitle}>Change the plan.</Text></View>
+          <View style={styles.headerCopy}><Text variant="eyebrow" color="accent">{isMax ? 'DOIT MAX COACH' : 'DOIT COACH'}</Text><Text variant="title" style={styles.coachTitle}>{isMax ? 'See the whole system.' : 'Change the plan.'}</Text></View>
           <Pressable accessibilityRole="button" accessibilityLabel="Create a new goal" onPress={() => router.push('/create-goal')} style={styles.goalButton}><Ionicons name="add" color={colors.accent} size={22} /></Pressable>
         </View>
         <ScrollView ref={scrollRef} style={styles.chat} contentContainerStyle={styles.chatContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -92,7 +102,7 @@ export default function CoachScreen() {
           </Card> : null}
           {error ? <Text variant="caption" color="danger">{error}</Text> : null}
         </ScrollView>
-        {!messages.some((message) => message.role === 'user') ? <ScrollView horizontal style={styles.starterRail} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.starters}>{starters.map((starter) => <Pressable key={starter} onPress={() => starter === 'Add an action' ? setInput('Add an action to ') : send(starter)} style={styles.starter}><Text variant="caption" color="secondary">{starter}</Text></Pressable>)}</ScrollView> : null}
+        {!messages.some((message) => message.role === 'user') ? <ScrollView horizontal style={styles.starterRail} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.starters}>{(isMax ? ['I only have 30 minutes today', 'Which goal is behind?', 'Fix this week', ...starters] : starters).map((starter) => <Pressable key={starter} onPress={() => starter === 'Add an action' ? setInput('Add an action to ') : send(starter)} style={styles.starter}><Text variant="caption" color="secondary">{starter}</Text></Pressable>)}</ScrollView> : null}
         <View style={styles.composer}>
           <VoiceCaptureButton compact onTranscript={setInput} />
           <TextInput value={input} onChangeText={setInput} onSubmitEditing={() => send()} editable={!thinking && !pending} maxFontSizeMultiplier={1.1} placeholder="Tell Coach what changed…" placeholderTextColor={colors.textMuted} selectionColor={colors.accent} style={styles.input} />

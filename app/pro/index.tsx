@@ -22,14 +22,14 @@ const tierCopy = {
   max: {
     name: 'DOIT MAX', eyebrow: 'THE COMPLETE DOIT SYSTEM', icon: 'flash' as const,
     headline: 'Maximum intelligence. Maximum control.', detail: 'The highest-capacity system for ambitious users who want DOIT working at full strength.',
-    features: ['100 active goals', '150 priority AI goal plans each month', '500 AI adaptations each month', 'Advanced weekly intelligence', 'Full history, exports, calendar and every Pro system'],
+    features: ['100 active goals', '150 AI goal plans each month', '500 AI adaptations each month', 'Cross-goal priority intelligence', 'Automatic plan rebuilding', 'MAX AI Goal Coach', 'Advanced weekly intelligence', 'Advanced progress analytics', 'Calendar-aware planning', 'Goal dependencies', 'Full exports', 'Every DOIT Pro feature'],
   },
 } as const;
 
 export default function ProScreen() {
   const web = Platform.OS === 'web';
   const { palette } = useAccentTheme();
-  const params = useLocalSearchParams<{ checkout?: string }>();
+  const params = useLocalSearchParams<{ checkout?: string; tier?: string }>();
   const { plan, planName, isPro, isMax, status, trialDaysLeft, willRenew, currentPeriodEndsAt, products, loading, storeReady, configurationError, startProTrial, restorePurchases, refreshSubscription } = useSubscription();
   const [tier, setTier] = useState<PaidTier>(isMax ? 'max' : 'pro');
   const [period, setPeriod] = useState<BillingPeriod>('annual');
@@ -38,6 +38,7 @@ export default function ProScreen() {
   const selectedProduct = useMemo(() => products.find((product) => product.tier === tier && product.period === period), [period, products, tier]);
 
   useEffect(() => { track('paywall viewed', { store_ready: storeReady }); }, [storeReady]);
+  useEffect(() => { if (params.tier === 'max') setTier('max'); }, [params.tier]);
   useEffect(() => {
     if (params.checkout !== 'success') return;
     refreshSubscription();

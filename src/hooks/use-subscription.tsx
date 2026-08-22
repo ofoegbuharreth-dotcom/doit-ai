@@ -64,6 +64,12 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
     return () => listener.remove();
   }, [refreshSubscription]);
 
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured) return;
+    const channel = supabase.channel(`subscription-entitlement-${user.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${user.id}` }, () => { void refreshSubscription(); }).subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [refreshSubscription, user]);
+
   const startProTrial = useCallback(async (packageId?: string) => {
     if (!user) return { error: 'Sign in to choose a DOIT subscription.' };
     if (purchasesConfigured) {

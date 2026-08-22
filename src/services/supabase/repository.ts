@@ -1,4 +1,4 @@
-import type { DailyCheckIn, FocusSession, Goal, GoalActivity, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, Task, TaskStatus } from '@/types';
+import type { CalendarItem, DailyCheckIn, FocusSession, Goal, GoalActivity, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, Task, TaskDependency, TaskStatus, WeeklyReview } from '@/types';
 import { supabase } from './client';
 
 const goalFromRow = (row: Record<string, any>): Goal => ({ id: row.id, userId: row.user_id, title: row.title, description: row.description ?? '', status: row.status, targetValue: Number(row.target_value), currentValue: Number(row.current_value), unit: row.unit ?? '%', targetDate: row.target_date ?? undefined, createdAt: row.created_at, updatedAt: row.updated_at });
@@ -7,7 +7,7 @@ const taskFromRow = (row: Record<string, any>): Task => ({ id: row.id, goalId: r
 const activityFromRow = (row: Record<string, any>): GoalActivity => ({ id: row.id, goalId: row.goal_id ?? undefined, userId: row.user_id, type: row.type, title: row.title, detail: row.detail ?? undefined, createdAt: row.created_at });
 
 export async function fetchWorkspace(userId: string) {
-  const [goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions] = await Promise.all([
+  const [goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews] = await Promise.all([
     supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     supabase.from('milestones').select('*, goals!inner(user_id)').eq('goals.user_id', userId).order('sort_order'),
     supabase.from('tasks').select('*').eq('user_id', userId).order('scheduled_date'),
@@ -15,15 +15,29 @@ export async function fetchWorkspace(userId: string) {
     supabase.from('daily_checkins').select('*').eq('user_id', userId).order('date', { ascending: false }),
     supabase.from('goal_progress_entries').select('*').eq('user_id', userId).order('recorded_on', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('focus_sessions').select('*').eq('user_id', userId).order('started_at', { ascending: false }).limit(200),
+    supabase.from('task_dependencies').select('*').eq('user_id', userId).order('created_at'),
+    supabase.from('calendar_items').select('*').eq('user_id', userId).order('start_time'),
+    supabase.from('weekly_reviews').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(8),
   ]);
-  const error = goals.error ?? milestones.error ?? tasks.error ?? activity.error ?? checkIns.error ?? progressEntries.error;
+  const error = goals.error ?? milestones.error ?? tasks.error ?? activity.error ?? checkIns.error ?? progressEntries.error ?? focusSessions.error ?? taskDependencies.error ?? calendarItems.error ?? weeklyReviews.error;
   if (error) throw error;
   return {
     goals: (goals.data ?? []).map(goalFromRow), milestones: (milestones.data ?? []).map(milestoneFromRow), tasks: (tasks.data ?? []).map(taskFromRow), activity: (activity.data ?? []).map(activityFromRow),
     checkIns: (checkIns.data ?? []).map((row): DailyCheckIn => ({ id: row.id, userId: row.user_id, date: row.date, mood: row.mood, blocker: row.blocker ?? undefined, accomplishment: row.accomplishment ?? undefined, createdAt: row.created_at })),
     progressEntries: (progressEntries.data ?? []).map((row): GoalProgressEntry => ({ id: row.id, goalId: row.goal_id, userId: row.user_id, amount: Number(row.amount), note: row.note ?? undefined, recordedOn: row.recorded_on, createdAt: row.created_at })),
     focusSessions: (focusSessions.data ?? []).map((row): FocusSession => ({ id: row.id, userId: row.user_id, taskId: row.task_id ?? undefined, startedAt: row.started_at, endedAt: row.ended_at ?? undefined, pausedSeconds: row.paused_seconds ?? 0, actualMinutes: row.actual_minutes ?? undefined, status: row.status, createdAt: row.created_at })),
+    taskDependencies: (taskDependencies.data ?? []).map((row): TaskDependency => ({ id: row.id, userId: row.user_id, taskId: row.task_id, dependsOnTaskId: row.depends_on_task_id, createdAt: row.created_at })),
+    calendarItems: (calendarItems.data ?? []).map((row): CalendarItem => ({ id: row.id, userId: row.user_id, title: row.title, type: row.type, startTime: row.start_time, endTime: row.end_time, goalId: row.goal_id ?? undefined, taskId: row.task_id ?? undefined, isFixed: row.is_fixed, createdAt: row.created_at, updatedAt: row.updated_at })),
+    weeklyReviews: (weeklyReviews.data ?? []).map((row): WeeklyReview => ({ id: row.id, userId: row.user_id, weekStart: row.week_start, weekEnd: row.week_end, tasksCompleted: row.tasks_completed, completionRate: Number(row.completion_rate), minutesSpent: row.minutes_spent, summary: row.summary, wins: row.wins ?? [], blockers: row.blockers ?? [], nextWeekChanges: row.next_week_changes ?? [], createdAt: row.created_at })),
   };
+}
+
+export async function persistTaskDependency(dependency: TaskDependency) {
+  return supabase.rpc('set_max_task_dependency', { p_task_id: dependency.taskId, p_depends_on_task_id: dependency.dependsOnTaskId });
+}
+
+export async function deleteTaskDependencyRecord(taskId: string) {
+  return supabase.rpc('set_max_task_dependency', { p_task_id: taskId, p_depends_on_task_id: null });
 }
 
 export async function persistGoalPlan(goal: Goal, plan: GoalPlanResponse, tasks: Task[], milestones: Milestone[]) {

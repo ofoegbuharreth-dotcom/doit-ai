@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 
 import { initialActivity, initialGoals, initialMilestones, initialTasks, demoUserId } from '@/constants/mock-data';
-import type { DailyCheckIn, FocusSession, Goal, GoalActivity, GoalDraft, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, Task, TaskStatus } from '@/types';
+import type { CalendarItem, DailyCheckIn, FocusSession, Goal, GoalActivity, GoalDraft, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, Task, TaskDependency, TaskStatus, WeeklyReview } from '@/types';
 import { today, tomorrow } from '@/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { aiProvider } from '@/services/ai';
@@ -10,7 +10,7 @@ import { openCalendarBlockFromIso } from '@/services/calendar';
 import { track } from '@/services/observability';
 import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, type SyncState, type WorkspaceMutation } from '@/services/sync';
 import { syncNextActionWidget } from '@/services/widget';
-import { deleteGoalProgressRecord, editGoalProgressRecord, fetchWorkspace, isSupabaseConfigured, logGoalProgressRecord, persistNewTask, persistTaskStatus } from '@/services/supabase';
+import { deleteGoalProgressRecord, deleteTaskDependencyRecord, editGoalProgressRecord, fetchWorkspace, isSupabaseConfigured, logGoalProgressRecord, persistNewTask, persistTaskDependency, persistTaskStatus } from '@/services/supabase';
 
 interface AppStore {
   goals: Goal[];
@@ -20,6 +20,9 @@ interface AppStore {
   checkIns: DailyCheckIn[];
   progressEntries: GoalProgressEntry[];
   focusSessions: FocusSession[];
+  taskDependencies: TaskDependency[];
+  calendarItems: CalendarItem[];
+  weeklyReviews: WeeklyReview[];
   draft: GoalDraft | null;
   generatedPlan: GoalPlanResponse | null;
   syncing: boolean;
@@ -48,6 +51,7 @@ interface AppStore {
   deleteProgress: (entryId: string) => Promise<{ error?: string }>;
   submitCheckIn: (mood: DailyCheckIn['mood'], accomplishment: string, blocker?: string) => void;
   applyAgentActions: (actions: AgentAction[]) => Promise<{ error?: string }>;
+  setTaskDependency: (taskId: string, dependsOnTaskId?: string) => Promise<{ error?: string }>;
 }
 
 const AppStoreContext = createContext<AppStore | null>(null);
@@ -64,6 +68,9 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   const [checkIns, setCheckIns] = useState<DailyCheckIn[]>([]);
   const [progressEntries, setProgressEntries] = useState<GoalProgressEntry[]>([]);
   const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
+  const [taskDependencies, setTaskDependencies] = useState<TaskDependency[]>([]);
+  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
+  const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
   const [draft, setDraft] = useState<GoalDraft | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<GoalPlanResponse | null>(null);
   const [syncing, setSyncing] = useState(isSupabaseConfigured);
@@ -91,7 +98,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     setSyncing(true); setSyncState('syncing'); setSyncError(null);
     try {
       const data = await fetchWorkspace(user.id);
-      setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions);
+      setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions); setTaskDependencies(data.taskDependencies); setCalendarItems(data.calendarItems); setWeeklyReviews(data.weeklyReviews);
       setLastSyncedAt(new Date().toISOString());
       setSyncState(pendingChangesRef.current ? 'saving' : 'synced');
     } catch (error) {
@@ -274,6 +281,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   }, [commitMutation]);
 
   const deleteGoal = useCallback(async (goalId: string) => {
+    const deletedTaskIds = new Set(tasks.filter((task) => task.goalId === goalId).map((task) => task.id));
     try {
       if (isSupabaseConfigured) {
         const result = await commitMutation({ type: 'delete_goal', goalId });
@@ -287,9 +295,10 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     setGoals((current) => current.filter((goal) => goal.id !== goalId));
     setMilestones((current) => current.filter((item) => item.goalId !== goalId));
     setTasks((current) => current.filter((task) => task.goalId !== goalId));
+    setTaskDependencies((current) => current.filter((item) => !deletedTaskIds.has(item.taskId) && !deletedTaskIds.has(item.dependsOnTaskId)));
     setProgressEntries((current) => current.filter((entry) => entry.goalId !== goalId));
     return {};
-  }, [commitMutation]);
+  }, [commitMutation, tasks]);
 
   const applyProgress = useCallback((goalId: string, nextValue: number, nextStatus: GoalStatus) => {
     setGoals((current) => current.map((goal) => goal.id === goalId ? { ...goal, currentValue: nextValue, status: nextStatus, updatedAt: new Date().toISOString() } : goal));
@@ -432,7 +441,27 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     } finally { setCoachSaving(false); }
   }, [addActivity, commitMutation, goals, tasks, user]);
 
-  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions }), [activity, applyAgentActions, checkIns, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, refreshWorkspace, replaceTask, replacingTaskId, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, tasks, updateGoal, updateTask]);
+  const setTaskDependency = useCallback(async (taskId: string, dependsOnTaskId?: string) => {
+    if (taskId === dependsOnTaskId) return { error: 'An action cannot depend on itself.' };
+    const previous = taskDependencies;
+    const existing = previous.find((item) => item.taskId === taskId);
+    const next = previous.filter((item) => item.taskId !== taskId);
+    if (dependsOnTaskId) next.push({ id: existing?.id ?? makeId(), userId: user?.id ?? demoUserId, taskId, dependsOnTaskId, createdAt: existing?.createdAt ?? new Date().toISOString() });
+    setTaskDependencies(next);
+    try {
+      if (isSupabaseConfigured) {
+        const result = dependsOnTaskId ? await persistTaskDependency(next.find((item) => item.taskId === taskId)!) : await deleteTaskDependencyRecord(taskId);
+        if (result.error) throw result.error;
+      }
+      addActivity({ goalId: tasks.find((task) => task.id === taskId)?.goalId, type: 'plan_adjusted', title: dependsOnTaskId ? 'MAX dependency updated' : 'MAX dependency removed', detail: dependsOnTaskId ? `This action now waits for “${tasks.find((task) => task.id === dependsOnTaskId)?.title ?? 'its prerequisite'}”.` : undefined });
+      return {};
+    } catch (error) {
+      setTaskDependencies(previous);
+      return { error: error instanceof Error ? error.message : 'Could not save that dependency.' };
+    }
+  }, [addActivity, taskDependencies, tasks, user?.id]);
+
+  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions, setTaskDependency }), [activity, applyAgentActions, calendarItems, checkIns, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, refreshWorkspace, replaceTask, replacingTaskId, setTaskDependency, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, taskDependencies, tasks, updateGoal, updateTask, weeklyReviews]);
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
 }
 
