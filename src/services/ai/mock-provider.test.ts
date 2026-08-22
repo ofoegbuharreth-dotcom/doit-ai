@@ -226,4 +226,35 @@ describe('buildLocalGoalPlan', () => {
   ])('uses a real-world progress unit for %s', (prompt, unit) => {
     expect(buildLocalGoalPlan(prompt).goal.unit).toBe(unit);
   });
+
+  it.each([
+    ['Plan my mum’s 50th birthday party', 'event commitments', /one-page.*brief/i],
+    ['Get my driving licence', 'verified stages', /official.*requirements/i],
+    ['Move to a new flat', 'move stages', /non-negotiables/i],
+    ['Decide which laptop to buy', 'decision stages', /decision brief/i],
+  ])('uses an operational strategy for unfamiliar real-world goal: %s', (prompt, unit, firstAction) => {
+    const result = buildLocalGoalPlan(prompt);
+    expect(result.goal.unit).toBe(unit);
+    expect(`${result.todayTasks[0]?.title} ${result.todayTasks[0]?.description}`).toMatch(firstAction);
+    expect(JSON.stringify(result)).not.toMatch(/success test|honest baseline|weakest failure|proof points/i);
+  });
+
+  it('turns a clarified unfamiliar outcome into concrete deliverables without AI', async () => {
+    const result = await new MockAIProvider().generateGoalPlan('I want to sort something important out', {
+      additionalDetails: 'Set up a safe weekly care schedule for my grandmother\nMy siblings currently arrange visits in separate chats\nOne hour this weekend',
+      clarificationTranscript: JSON.stringify([
+        { question: 'What would done look like?', answer: 'Set up a safe weekly care schedule for my grandmother' },
+        { question: 'Where are you starting today?', answer: 'My siblings currently arrange visits in separate chats' },
+        { question: 'How much time can you give this each week?', answer: 'One hour this weekend' },
+      ]),
+      clarificationResolved: 'true',
+    });
+    expect(result).not.toHaveProperty('type', 'clarification');
+    if (!('type' in result)) {
+      expect(result.goal.description).toMatch(/safe weekly care schedule.*separate chats/i);
+      expect(result.todayTasks[0]?.title).toMatch(/smallest complete version|finish checklist/i);
+      expect(result.todayTasks[1]?.estimatedMinutes).toBe(60);
+      expect(JSON.stringify(result)).not.toMatch(/success test|honest baseline|retested/i);
+    }
+  });
 });

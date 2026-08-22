@@ -10,7 +10,7 @@ export type GoalIntent = {
 };
 
 export function analyzeGoalIntent(prompt: string, context?: PlanContext): GoalIntent {
-  const details = context?.additionalDetails?.trim();
+  const details = semanticGoalDetails(context);
   const parsed = parseGoal(details ? `${prompt}. ${details}` : prompt);
   const value = parsed.normalizedText;
   const domain = mapDomain(parsed, value);
@@ -27,6 +27,20 @@ export function analyzeGoalIntent(prompt: string, context?: PlanContext): GoalIn
       distance: /marathon/.test(value) ? 'marathon' : /10\s?k(?:m)?/.test(value) ? '10K' : /5\s?k(?:m)?/.test(value) ? '5K' : undefined,
     },
   };
+}
+
+function semanticGoalDetails(context?: PlanContext) {
+  const fallback = context?.additionalDetails?.split(/\r?\n/).map((item) => item.trim()).find(Boolean) ?? '';
+  try {
+    const transcript = JSON.parse(context?.clarificationTranscript ?? '[]') as { question?: string; answer?: string }[];
+    const semanticAnswers = transcript.filter((item) => {
+      const question = item.question?.toLowerCase() ?? '';
+      return !/starting|right now|today|baseline|current|how much time|each week|daily|weekly|capacity/.test(question);
+    }).map((item) => item.answer?.trim()).filter((answer): answer is string => Boolean(answer));
+    return semanticAnswers.join('. ') || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function shouldAskForClarification(intent: GoalIntent, context?: PlanContext) {

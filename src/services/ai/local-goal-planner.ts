@@ -12,8 +12,9 @@ export function buildGoalPlan(prompt: string, context?: PlanContext): GoalPlanRe
   const raw = prompt.trim();
   activePlanContext = context;
   const value = `${raw} ${context?.additionalDetails ?? ''}`.toLowerCase();
-  const title = cleanGoalTitle(raw);
   const intent = analyzeGoalIntent(prompt, context);
+  const clarifiedOutcome = clarificationDetails(context).outcome;
+  const title = clarifiedOutcome && isVagueGoalRequest(raw) ? cleanGoalTitle(clarifiedOutcome) : cleanGoalTitle(raw);
   const useShapeFirst = intent.parsed.shape === 'wellbeing' || intent.parsed.shape === 'quantity' && isReusableQuantityUnit(intent.parsed.targetUnit);
   const plan = useShapeFirst
     ? buildShapePlan(intent.parsed, title, context)
@@ -461,34 +462,65 @@ function travelPlan(value: string, title: string, context?: PlanContext): PlanSp
   return plan(sentenceCase(title), `Complete six travel commitments: dates, budget, transport, accommodation, essential documents, and a usable itinerary${deadline(context)}.`, 6, 'preparations', [milestone('Dates and maximum budget agreed', 'The travel window and hard spending ceiling are written down.', 1), milestone('Transport and accommodation selected', 'Comparable options are checked for total cost, cancellation terms, and location.', 3), milestone('Documents and essential bookings confirmed', 'Passport or ID validity, insurance needs, and time-sensitive bookings are checked.', 5), milestone('Trip is ready to take', 'All six preparations are complete and confirmation details are accessible offline.', 6)], [task('Set the date window and hard budget', 'Write earliest departure, latest return, and the maximum total you can spend including transport, stay, food, and a 10% buffer.', 'high', 15), task('Compare three complete travel combinations', 'For each option, record transport plus accommodation total, travel time, location, and cancellation conditions.', 'high', 30), task('Choose the next commitment and deadline', 'Decide whether transport, accommodation, documents, or saving must happen first and set the exact date it will be completed.', 'medium', 10)], 'Compare whole-trip cost rather than attractive headline prices. A cheaper flight can become the expensive option after baggage, transfers, and poor accommodation location.');
 }
 
-function generalPlan(title: string, context?: PlanContext): PlanSpec {
-  const details = clarificationAnswers(context?.additionalDetails);
-  const definition = details[0] ?? `a visible result that proves ${title}`;
-  const startingPoint = details[1] ?? 'the current starting point';
-  const time = details[2] || context?.availableTime?.trim() || 'one focused block each week';
+function generalPlan(parsed: ParsedGoal, title: string, context?: PlanContext): PlanSpec {
+  const value = `${parsed.normalizedText} ${context?.additionalDetails ?? ''}`.toLowerCase();
+  const details = clarificationDetails(context);
+  const subject = usefulSubject(parsed.subject, title, details.outcome);
+  const definition = details.outcome ?? `a finished, reviewable result for ${subject}`;
+  const startingPoint = details.startingPoint ?? context?.currentProgress?.trim() ?? 'the current starting point';
+  const time = details.availableTime ?? context?.availableTime?.trim() ?? 'one focused block each week';
+
+  if (isEventGoal(value)) return eventPlan(title, subject, value, context);
+  if (isMoveGoal(value)) return movePlan(title, subject, context);
+  if (isCredentialGoal(value)) return credentialPlan(title, subject, value, context);
+  if (isDecisionGoal(value)) return decisionPlan(title, subject, definition, context);
+
   return plan(
     sentenceCase(title),
-    `Success means ${definition}. The plan starts from ${startingPoint}, using ${time}${deadline(context)}.`,
+    `Complete ${definition} from ${startingPoint}, using ${time}${deadline(context)}. Progress is recorded through finished outputs, decisions, and completed next steps—not vague percentages.`,
     4,
-    'proof points',
+    'completed stages',
     [
-      milestone('Success test and baseline recorded', `Turn “${definition}” into a yes/no test or a number, then record the honest result from ${startingPoint}.`, 1),
-      milestone('First complete attempt tested', 'Complete the smallest end-to-end attempt and compare its result with the success test.', 2),
-      milestone('Weakest failure corrected and retested', 'Change the one factor causing the largest gap, then repeat the same test under the same conditions.', 3),
-      milestone('Target result achieved twice', 'Meet the success test twice so the outcome is repeatable rather than a one-off.', 4),
+      milestone(`${sentenceCase(subject)} requirements confirmed`, `The intended result, required parts, deadline, constraints, and person affected are written clearly enough to guide the work.`, 1),
+      milestone(`First usable part of ${subject} completed`, 'One meaningful part is finished from beginning to end and can be reviewed without explaining unfinished gaps.', 2),
+      milestone(`${sentenceCase(subject)} reviewed and corrected`, 'The result is checked against the real requirements and the largest missing or weak part is fixed.', 3),
+      milestone(`${sentenceCase(subject)} completed and handed off`, 'The intended result is delivered, submitted, used, or confirmed in the place where it actually matters.', 4),
     ],
     [
-      task('Turn success into one pass-or-fail test', `Use this answer: “${definition}.” Write the exact number, observable result, or person who will judge it—and what counts as passing.`, 'high', 10),
-      task('Run and record the honest baseline', `Starting from ${startingPoint}, attempt the real activity once without extra preparation. Save the score, recording, outcome, or checklist result.`, 'high', 25),
-      task('Schedule the first improvement-and-retest block', `Reserve time from your stated capacity—${time}. Spend the first two-thirds fixing the earliest failure, then repeat the same baseline test.`, 'medium', 10),
+      task(`Write the finish checklist for ${subject}`, `Turn “${definition}” into 3–7 visible requirements. Mark what already exists from ${startingPoint}, what is missing, and who or what must confirm the final result.`, 'high', 15),
+      task(`Complete the smallest useful part of ${subject}`, 'Choose one requirement that produces a real finished output today. Complete it fully, save it in the final location, and record what is now different.', 'high', fitDuration(time, 30)),
+      task(`Book the next two ${subject} work blocks`, `Reserve two exact start times within ${time}. Give each block one named output from the finish checklist and leave space for a final review.`, 'medium', 10),
     ],
-    'The plan uses your own success test instead of invented percentages. Keep the test stable until the evidence shows exactly what needs to change.',
+    'A useful plan should create finished evidence immediately. Keep the finish checklist stable, complete one real output at a time, and change the route when evidence—not mood—shows a better next move.',
   );
 }
 
 function buildShapePlan(parsed: ParsedGoal, title: string, context?: PlanContext): PlanSpec {
-  const subject = parsed.subject || title;
+  const clarifiedOutcome = clarificationDetails(context).outcome;
+  const subject = clarifiedOutcome && parsed.subject.includes('.') ? cleanGoalTitle(clarifiedOutcome).toLowerCase() : parsed.subject || title;
   const template = INTENT_TEMPLATES[parsed.intent];
+  const value = `${parsed.normalizedText} ${context?.additionalDetails ?? ''}`.toLowerCase();
+  if (isEventGoal(value)) return eventPlan(title, subject, value, context);
+  if (isMoveGoal(value)) return movePlan(title, subject, context);
+  if (isCredentialGoal(value)) return credentialPlan(title, subject, value, context);
+  if (isDecisionGoal(value)) return decisionPlan(title, subject, clarificationDetails(context).outcome ?? `a clear choice that moves ${subject} forward`, context);
+  if (parsed.shape === 'backlog') {
+    const total = parsed.targetValue ?? parseLargestNumber(parsed.normalizedText) ?? 5;
+    const unit = parsed.targetUnit ?? 'items';
+    return plan(
+      sentenceCase(title),
+      `Finish all ${pretty(total)} ${unit}, ordered by deadline, consequence, effort, and dependency${deadline(context)}. Progress only moves when an item reaches its real done state.`,
+      total,
+      `${unit} completed`,
+      ratioMilestones(total, [0.1, 0.35, 0.7, 1], (amount) => `${pretty(amount)} ${unit} fully completed`, ['Every item is visible and the highest-risk work is first.', 'The urgent work is closed and the remaining load fits the available time.', 'Most work is complete with time protected for the final items.', 'Every item is complete and its submission or handoff is confirmed.']),
+      [
+        task(`Build the ${unit} priority board`, `List every item with its real deadline, consequence of being late, estimated effort, current stage, and exact done condition. Sort the highest-risk item first.`, 'high', 20),
+        task(`Finish the next shippable ${singular(unit)}`, 'Open only the first item, identify its next complete section, and take it through its real submission, delivery, or confirmation step.', 'high', 35),
+        task('Schedule the remaining finish blocks', `Work backward from every deadline, include review and handoff time, and leave a buffer before the riskiest deadline.${timeNote(context)}`, 'high', 15),
+      ],
+      'Backlogs shrink through finished items, not activity. Prioritise consequence and dependency, then close one shippable unit before switching.',
+    );
+  }
   if (parsed.shape === 'quantity' && parsed.targetValue && parsed.targetUnit) {
     const target = parsed.targetValue;
     const unit = parsed.targetUnit;
@@ -522,14 +554,14 @@ function buildShapePlan(parsed: ParsedGoal, title: string, context?: PlanContext
       ],
       [
         task(finishing ? 'List the exact remaining work' : 'Define the smallest complete version', `Write the required outcome for ${subject}, then separate must-have work from optional polish.`, 'high', 15),
-        task('Finish one end-to-end slice', 'Choose the smallest part that moves from input to finished result. Complete it fully before opening another branch of work.', 'high', 35),
+        task(`Finish one complete part of ${subject}`, 'Choose the smallest part that moves from input to finished result. Complete it fully before opening another branch of work.', 'high', fitDuration(clarificationDetails(context).availableTime ?? context?.availableTime?.trim() ?? '', 35)),
         task('Set the review and delivery checks', 'Write who or what will test it, the three most likely failure points, and the exact delivery step.', 'medium', 15),
       ],
       'A complete narrow version exposes the truth sooner than several polished fragments. Control scope first, then improve what real testing proves matters.',
     );
   }
   if (parsed.shape === 'habit') {
-    return habitPlan(parsed.normalizedText, title, context) ?? generalPlan(title, context);
+    return habitPlan(parsed.normalizedText, title, context) ?? generalPlan(parsed, title, context);
   }
   if (parsed.shape === 'wellbeing') {
     return plan(
@@ -548,7 +580,137 @@ function buildShapePlan(parsed: ParsedGoal, title: string, context?: PlanContext
   if (parsed.shape === 'skill' || parsed.intent === 'learn' || parsed.intent === 'improve') {
     return plan(sentenceCase(title), `${template.outcomeFrame.replace('{subject}', subject)}${deadline(context)}`, 12, 'deliberate sessions', [milestone('Baseline skill demonstrated', `Complete a real ${subject} attempt and record what currently works and fails.`, 1), milestone('Four focused sessions completed', 'Practise the highest-impact subskill with a consistent result measure.', 4), milestone('Eight sessions completed with a harder retest', 'Repeat the baseline under slightly harder or more independent conditions.', 8), milestone('Twelve sessions completed and skill demonstrated', 'Produce or perform a complete result without step-by-step help.', 12)], [task(`Complete one real ${subject} attempt`, 'Do a small authentic version without extra preparation. Save the result and identify the earliest point where you become stuck.', 'high', 25), task('Turn the first gap into one drill', 'Choose one repeatable exercise that isolates the gap and define the number, quality check, or example that counts as improvement.', 'high', 15), task('Schedule three learn–practise–apply sessions', `Each session should learn one idea, practise it briefly, then use it in a real result.${timeNote(context)}`, 'medium', 10)], 'Skill goals need transfer, not just consumption. Every learning block should end with something performed, solved, built, or explained.');
   }
-  return generalPlan(title, context);
+  return generalPlan(parsed, title, context);
+}
+
+function eventPlan(title: string, subject: string, value: string, context?: PlanContext): PlanSpec {
+  const occasion = value.match(/(?:birthday|wedding|party|event|fundraiser|meetup|conference|celebration|dinner|reunion)/)?.[0] ?? subject;
+  return plan(
+    sentenceCase(title),
+    `Deliver a ready-to-run ${occasion} with the purpose, guest experience, budget, venue, suppliers, and run sheet confirmed${deadline(context)}.`,
+    6,
+    'event commitments',
+    [
+      milestone('Purpose, date, people, and budget agreed', 'The intended experience, decision-maker, date window, guest count, and maximum spend are written down.', 1),
+      milestone('Venue and essential bookings confirmed', 'The location and any time-sensitive supplier, permission, or equipment decisions are booked in writing.', 3),
+      milestone('Guests, logistics, and backup plan ready', 'Invitations, responses, timings, access, food, equipment, responsibilities, and the main fallback are confirmed.', 5),
+      milestone(`${sentenceCase(occasion)} delivered and closed`, 'The event runs from the shared plan, final payments are checked, and one short review records what worked.', 6),
+    ],
+    [
+      task(`Write the one-page ${occasion} brief`, 'Record the purpose, date window, location, guest count, maximum budget, three must-haves, three optional extras, and who makes the final decisions.', 'high', 20),
+      task('Identify the first deadline that cannot move', 'Check venue availability, invitations, deposits, permissions, travel, and suppliers. Choose the earliest irreversible decision and record its true due date.', 'high', 15),
+      task('Contact or compare three real options', 'Get three comparable venue, supplier, or logistics options with total price, availability, inclusions, and cancellation terms. Make the next booking decision from those facts.', 'high', 30),
+    ],
+    'Events fail at handoffs and assumptions. Put owners, dates, total costs, confirmation details, and a fallback beside every important commitment.',
+  );
+}
+
+function movePlan(title: string, subject: string, context?: PlanContext): PlanSpec {
+  return plan(
+    sentenceCase(title),
+    `Complete the move with the new place confirmed, money and documents ready, possessions transferred, and every essential service working${deadline(context)}.`,
+    5,
+    'move stages',
+    [
+      milestone('Requirements and maximum moving budget fixed', 'Location, move date, non-negotiables, affordability limit, and approval requirements are written down.', 1),
+      milestone('New place and move date confirmed', 'The agreement is checked, required money is ready, and the key dates and responsibilities are confirmed in writing.', 2),
+      milestone('Packing, transport, and address changes ready', 'Every area has an owner or box plan; transport, utilities, post, and important account changes are scheduled.', 4),
+      milestone('Move completed and essentials verified', 'Keys, inventory, meter readings, documents, essential rooms, and old-place handoff are all confirmed.', 5),
+    ],
+    [
+      task(`Write the non-negotiables for ${subject}`, 'Set the latest move date, acceptable locations, maximum monthly cost, upfront money available, space needs, and any work, school, travel, or accessibility constraint.', 'high', 20),
+      task('Build the move money and documents folder', 'List deposit, rent, transport, supplies, overlap, and emergency buffer. Gather ID, income evidence, references, agreements, and every confirmation in one folder.', 'high', 25),
+      task('Choose the next irreversible commitment', 'Identify whether finding the place, signing, giving notice, booking transport, or arranging help must happen next. Confirm its deadline before taking later steps.', 'high', 15),
+    ],
+    'A move is a dependency plan: secure the place and dates before making commitments that rely on them, and keep money, documents, confirmations, and inventory together.',
+  );
+}
+
+function credentialPlan(title: string, subject: string, value: string, context?: PlanContext): PlanSpec {
+  const credential = value.match(/driving licence|driver'?s? licence|license|passport|visa|certificate|certification|qualification|permit/)?.[0] ?? subject;
+  const driving = /driving|driver/.test(value);
+  return plan(
+    sentenceCase(title),
+    `Complete every eligibility, application, preparation, assessment, and confirmation step required for ${credential}${deadline(context)}.`,
+    5,
+    'verified stages',
+    [
+      milestone('Official route and eligibility checked', 'The authoritative requirements, fees, documents, waiting times, and expiry rules are saved from the issuing body.', 1),
+      milestone('Application and required documents complete', 'Every required form, identity document, payment, photo, appointment, or prerequisite is submitted and confirmed.', 2),
+      milestone('Preparation reaches assessment standard', `Practice covers the published criteria${driving ? ', including theory knowledge and supervised driving skills' : ''}, with weak areas recorded and retested.`, 3),
+      milestone('Assessment or final submission completed', 'The real assessment, appointment, or evidence submission is complete and its result or receipt is stored.', 4),
+      milestone(`${sentenceCase(credential)} received and checked`, 'The issued credential is received, its details are correct, and renewal or usage requirements are saved.', 5),
+    ],
+    [
+      task(`Open the official ${credential} requirements`, 'Use the issuing authority—not a blog. Save the eligibility rules, complete step order, fees, required documents, expected wait, and official application link.', 'high', 20),
+      task('Complete the readiness checklist', 'Mark each document, prerequisite, skill, appointment, payment, and dependency as ready, waiting, or missing. Put a next action and date beside every missing item.', 'high', 20),
+      task(driving ? 'Book the next lesson or theory practice block' : 'Complete the first application step', driving ? `Choose the next exact practice time and the published skill or theory topic it will cover.${timeNote(context)}` : 'Finish the earliest official step that does not depend on missing information, then save its confirmation.', 'high', 25),
+    ],
+    'For official processes, the issuing authority defines done. Keep the current requirements, receipts, dates, and application reference together so an avoidable admin gap cannot reset progress.',
+  );
+}
+
+function decisionPlan(title: string, subject: string, definition: string, context?: PlanContext): PlanSpec {
+  return plan(
+    sentenceCase(title),
+    `Make and carry out a defensible decision about ${subject}, using explicit requirements and real evidence${deadline(context)}.`,
+    4,
+    'decision stages',
+    [
+      milestone('Decision and constraints defined', `The choice, deadline, hard constraints, and desired result—${definition}—are written down.`, 1),
+      milestone('Real options compared using the same criteria', 'At least three viable options are scored from verified cost, risk, effort, timing, and outcome evidence.', 2),
+      milestone('Best option tested or challenged', 'The leading option survives a small trial, reference check, second opinion, or pre-mortem against its largest risk.', 3),
+      milestone('Decision committed and next action completed', 'The option is chosen, the reason is recorded, and its first irreversible or useful action is complete.', 4),
+    ],
+    [
+      task(`Write the decision brief for ${subject}`, `State the choice, why it matters, when it must be made, ${definition}, three non-negotiables, and the largest downside you cannot accept.`, 'high', 15),
+      task('Build one fair comparison table', 'List three real options and compare each using the same five criteria. Use verified numbers or facts and mark every assumption.', 'high', 25),
+      task('Test the leading option cheaply', 'Choose the smallest call, trial, quote, visit, sample, or conversation that can disprove the favourite before you fully commit.', 'medium', 20),
+    ],
+    'Good decisions do not require certainty. They require consistent criteria, honest trade-offs, and the cheapest useful test of the biggest assumption.',
+  );
+}
+
+function isEventGoal(value: string) { return /\b(?:birthday|wedding|party|event|fundraiser|meetup|conference|celebration|dinner|reunion)\b/.test(value); }
+function isMoveGoal(value: string) { return /\b(?:move|moving|relocate|relocating)\b.*\b(?:flat|apartment|house|home|city|country)|\bnew (?:flat|apartment|house|home)\b/.test(value); }
+function isCredentialGoal(value: string) { return /\b(?:driving licence|driver'?s? licence|license|passport|visa|certificate|certification|qualification|permit)\b/.test(value); }
+function isDecisionGoal(value: string) { return /\b(?:choose|decide|decision|compare|pick|select|figure out whether)\b/.test(value); }
+
+function usefulSubject(parsedSubject: string, title: string, clarifiedOutcome?: string) {
+  const candidate = parsedSubject.trim();
+  if (candidate.length > 2 && !/^(?:it|this|that|myself|everything|anything|life|improve|better|finish|start)$/i.test(candidate)) return candidate;
+  return cleanGoalTitle(clarifiedOutcome || title).toLowerCase();
+}
+
+function singular(unit: string) { return unit.replace(/ completed$/, '').replace(/ies$/, 'y').replace(/s$/, ''); }
+function fitDuration(time: string, fallback: number) {
+  const minutes = time.match(/(\d+|one|two|three)\s*(?:minute|min)/i)?.[1];
+  if (minutes) return Math.max(5, Math.min(90, numberWord(minutes)));
+  const hours = time.match(/(\d+(?:\.\d+)?|one|two|three)\s*(?:hour|hr)/i)?.[1];
+  return hours ? Math.max(15, Math.min(120, Math.round(numberWord(hours) * 60))) : fallback;
+}
+function numberWord(value: string) { return ({ one: 1, two: 2, three: 3 }[value.toLowerCase()] ?? Number(value)) as number; }
+
+function clarificationDetails(context?: PlanContext) {
+  const answers = clarificationAnswers(context?.additionalDetails);
+  const result: { outcome?: string; startingPoint?: string; availableTime?: string } = {};
+  try {
+    const transcript = JSON.parse(context?.clarificationTranscript ?? '[]') as { question?: string; answer?: string }[];
+    for (const item of transcript) {
+      const question = item.question?.toLowerCase() ?? '';
+      const answer = item.answer?.trim();
+      if (!answer) continue;
+      if (/done|outcome|result|work on|specifically|want to do/.test(question)) result.outcome = answer;
+      else if (/starting|right now|today|baseline|current/.test(question)) result.startingPoint = answer;
+      else if (/time|each week|daily|weekly|capacity/.test(question)) result.availableTime = answer;
+    }
+  } catch {
+    // The newline answers remain a safe fallback for contexts created by older app versions.
+  }
+  result.outcome ??= answers[0];
+  result.startingPoint ??= answers[1];
+  result.availableTime ??= answers[2];
+  return result;
 }
 
 function isReusableQuantityUnit(unit?: string) {
@@ -586,9 +748,12 @@ function timeNote(context?: PlanContext) { return context?.availableTime?.trim()
 function contextNote() {
   const context = activePlanContext;
   const parts: string[] = [];
-  if (context?.currentProgress?.trim()) parts.push(`Starting point: ${context.currentProgress.trim()}.`);
+  const clarified = clarificationDetails(context);
+  const startingPoint = context?.currentProgress?.trim() || clarified.startingPoint;
+  if (startingPoint) parts.push(`Starting point: ${startingPoint}.`);
   if (context?.constraints?.trim()) parts.push(`Constraints: ${context.constraints.trim()}.`);
   return parts.length ? ` ${parts.join(' ')}` : '';
 }
 function weeklyAmount(target: number, targetDate?: string) { const date = targetDate ? new Date(`${targetDate}T12:00:00`) : null; const weeks = date && !Number.isNaN(date.getTime()) ? Math.max(1, Math.ceil((date.getTime() - Date.now()) / 604_800_000)) : 20; return Math.max(1, Math.ceil(target / weeks)); }
 function clarificationAnswers(value?: string) { return (value ?? '').split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.endsWith('?')); }
+function isVagueGoalRequest(value: string) { return /^(?:i\s+(?:want|need)\s+to\s+)?(?:improve|sort (?:something|things?) out|fix (?:something|things?)|make (?:my )?life better|do better|change things?)\b/i.test(value.trim()); }
