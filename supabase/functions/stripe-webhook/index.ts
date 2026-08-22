@@ -2,6 +2,16 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { notifyOwnerOfStripeCancellation } from '../_shared/cancellation-notification.ts';
 import { json, stripeRequest } from '../_shared/stripe.ts';
+import {
+  isDuplicateEventClaim,
+  isSubscriptionEvent,
+  missingUserAcknowledgement,
+  resolveExistingAppUser,
+  subscriptionAccessState,
+  stripeCustomerId,
+  stripeSubscriptionId,
+  webhookRoute,
+} from './logic.ts';
 
 function tierFromSubscription(stripeSubscription: any) {
   const priceId = stripeSubscription?.items?.data?.[0]?.price?.id;
@@ -38,7 +48,7 @@ function subscriptionPeriodEnd(subscription: any) {
 
 function invoiceSubscriptionId(invoice: any) {
   const value = invoice?.subscription ?? invoice?.parent?.subscription_details?.subscription;
-  return typeof value === 'string' ? value : value?.id;
+  return stripeSubscriptionId(value);
 }
 
 Deno.serve(async (request) => {
@@ -51,23 +61,56 @@ Deno.serve(async (request) => {
   if (Deno.env.get('STRIPE_LIVE_MODE') === 'true' && !event.livemode) return json({ received: true, ignored: 'test_mode_event' });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { error: claimError } = await admin.from('stripe_webhook_events').insert({ event_id: event.id, event_type: event.type });
-  if (claimError?.code === '23505') return json({ received: true, duplicate: true });
+  if (isDuplicateEventClaim(claimError?.code)) return json({ received: true, duplicate: true });
   if (claimError) return json({ error: claimError.message }, 500);
 
-  const syncSubscription = async (stripeSubscription: any, fallbackUserId?: string) => {
-    let userId = stripeSubscription?.metadata?.user_id ?? fallbackUserId;
-    if (!userId && stripeSubscription?.customer) {
-      const customerId = typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : stripeSubscription.customer.id;
-      const { data } = await admin.from('subscriptions').select('user_id').eq('provider_customer_id', customerId).maybeSingle();
-      userId = data?.user_id;
-    }
-    if (!userId) throw new Error(`No DOIT AI user was attached to Stripe subscription ${stripeSubscription?.id}.`);
+  const appUserExists = async (userId: string) => {
+    // `public.profiles` is DOIT's public app-user table. Its primary key has a
+    // foreign key to `auth.users`, so a profile row proves both records exist.
+    const { data, error } = await admin.from('profiles').select('id').eq('id', userId).maybeSingle();
+    if (error) throw error;
+    return Boolean(data?.id);
+  };
 
-    const { data: previous } = await admin.from('subscriptions').select('plan, status, cancel_at_period_end, cancellation_notified_at').eq('user_id', userId).maybeSingle();
-    const stripeStatus = String(stripeSubscription.status ?? 'incomplete');
-    const entitled = stripeStatus === 'active' || stripeStatus === 'trialing';
-    const status = stripeStatus === 'trialing' ? 'trialing' : stripeStatus === 'active' ? 'active' : stripeStatus === 'canceled' ? 'cancelled' : 'expired';
-    const customerId = typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : stripeSubscription.customer?.id;
+  const resolveUser = async (stripeSubscription: any, fallbackUserId?: string) => {
+    const customerId = stripeCustomerId(stripeSubscription);
+    const subscriptionId = stripeSubscription?.id;
+    const attemptedUserId = stripeSubscription?.metadata?.user_id ?? fallbackUserId;
+    let mappedUserId: string | undefined;
+
+    if (subscriptionId) {
+      const { data, error } = await admin.from('subscriptions').select('user_id').eq('provider_subscription_id', subscriptionId).maybeSingle();
+      if (error) throw error;
+      mappedUserId = data?.user_id;
+    }
+    if (!mappedUserId && customerId) {
+      const { data, error } = await admin.from('subscriptions').select('user_id').eq('provider_customer_id', customerId).maybeSingle();
+      if (error) throw error;
+      mappedUserId = data?.user_id;
+    }
+
+    const userId = await resolveExistingAppUser(mappedUserId, attemptedUserId, appUserExists);
+    return { userId, customerId, attemptedUserId: attemptedUserId ?? mappedUserId };
+  };
+
+  const syncSubscription = async (stripeSubscription: any, fallbackUserId?: string) => {
+    const resolution = await resolveUser(stripeSubscription, fallbackUserId);
+    const { customerId, attemptedUserId, userId } = resolution;
+    if (!userId) {
+      console.warn('Stripe webhook skipped because the DOIT app user does not exist.', {
+        eventId: event.id,
+        eventType: event.type,
+        stripeCustomerId: customerId ?? null,
+        stripeSubscriptionId: stripeSubscription?.id ?? null,
+        attemptedUserId: attemptedUserId ?? null,
+      });
+      return { skipped: true } as const;
+    }
+
+    const { data: previous, error: previousError } = await admin.from('subscriptions').select('plan, status, cancel_at_period_end, cancellation_notified_at').eq('user_id', userId).maybeSingle();
+    if (previousError) throw previousError;
+    const paidTier = tierFromSubscription(stripeSubscription);
+    const { entitled, plan, status, stripeStatus } = subscriptionAccessState(event.type, stripeSubscription.status, paidTier);
     const priceId = stripeSubscription?.items?.data?.[0]?.price?.id ?? null;
     const trialEndsAt = stripeSubscription?.trial_end ? new Date(Number(stripeSubscription.trial_end) * 1000).toISOString() : null;
     const trialStartedAt = stripeSubscription?.trial_start ? new Date(Number(stripeSubscription.trial_start) * 1000).toISOString() : null;
@@ -80,7 +123,7 @@ Deno.serve(async (request) => {
 
     const update: Record<string, unknown> = {
       user_id: userId,
-      plan: entitled ? tierFromSubscription(stripeSubscription) : 'free',
+      plan,
       status,
       provider: 'stripe',
       provider_customer_id: customerId,
@@ -94,32 +137,58 @@ Deno.serve(async (request) => {
     };
     if (entitled && !cancelAtPeriodEnd) update.cancellation_notified_at = null;
     if (stripeStatus === 'trialing') {
-      const { data: current } = await admin.from('subscriptions').select('trial_use_count, provider_subscription_id').eq('user_id', userId).maybeSingle();
+      const { data: current, error: currentError } = await admin.from('subscriptions').select('trial_use_count, provider_subscription_id').eq('user_id', userId).maybeSingle();
+      if (currentError) throw currentError;
       if (current?.provider_subscription_id !== stripeSubscription.id) update.trial_use_count = Math.min(2, Number(current?.trial_use_count ?? 0) + 1);
     }
     const { error } = await admin.from('subscriptions').upsert(update, { onConflict: 'user_id' });
+    if (error?.code === '23503' && String(error.message ?? '').includes('subscriptions_user_id_fkey')) {
+      console.warn('Stripe webhook skipped after the subscription user foreign key rejected the resolved user.', {
+        eventId: event.id,
+        eventType: event.type,
+        stripeCustomerId: customerId ?? null,
+        stripeSubscriptionId: stripeSubscription?.id ?? null,
+        attemptedUserId: userId,
+      });
+      return { skipped: true } as const;
+    }
     if (error) throw error;
 
-    if (shouldNotifyCancellation) await notifyOwnerOfStripeCancellation(admin, userId, stripeSubscription, previous?.plan ?? tierFromSubscription(stripeSubscription));
+    if (shouldNotifyCancellation) await notifyOwnerOfStripeCancellation(admin, userId, stripeSubscription, previous?.plan ?? paidTier);
+    return { skipped: false } as const;
+  };
+
+  const acknowledgeIfSkipped = (result: { skipped: boolean }) => {
+    if (!result.skipped) return undefined;
+    const acknowledgement = missingUserAcknowledgement();
+    return json(acknowledgement.body, acknowledgement.status);
   };
 
   try {
-    if (event.type === 'checkout.session.completed') {
+    const route = webhookRoute(event.type);
+    if (route === 'checkout') {
       const session = event.data.object;
-      const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
-      if (subscriptionId) await syncSubscription(await stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, undefined, 'GET'), session.client_reference_id ?? session.metadata?.user_id);
-    } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
+      const subscriptionId = stripeSubscriptionId(session.subscription);
+      if (subscriptionId) {
+        const response = acknowledgeIfSkipped(await syncSubscription(await stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, undefined, 'GET'), session.client_reference_id ?? session.metadata?.user_id));
+        if (response) return response;
+      }
+    } else if (route === 'subscription' && isSubscriptionEvent(event.type)) {
       const eventSubscription = event.data.object;
+      let subscriptionToSync = eventSubscription;
       try {
-        const latest = await stripeRequest(`/subscriptions/${encodeURIComponent(eventSubscription.id)}`, undefined, 'GET');
-        await syncSubscription(latest);
+        subscriptionToSync = await stripeRequest(`/subscriptions/${encodeURIComponent(eventSubscription.id)}`, undefined, 'GET');
       } catch (error) {
         if (event.type !== 'customer.subscription.deleted') throw error;
-        await syncSubscription(eventSubscription);
       }
-    } else if (['invoice.paid', 'invoice.payment_failed'].includes(event.type)) {
+      const response = acknowledgeIfSkipped(await syncSubscription(subscriptionToSync));
+      if (response) return response;
+    } else if (route === 'invoice') {
       const subscriptionId = invoiceSubscriptionId(event.data.object);
-      if (subscriptionId) await syncSubscription(await stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, undefined, 'GET'));
+      if (subscriptionId) {
+        const response = acknowledgeIfSkipped(await syncSubscription(await stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, undefined, 'GET')));
+        if (response) return response;
+      }
     }
     return json({ received: true });
   } catch (error) {
