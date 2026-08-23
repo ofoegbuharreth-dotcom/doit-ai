@@ -14,6 +14,12 @@ export interface DoitProfile {
 
 const defaultGender: ProfileGender = 'prefer_not_to_say';
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
+  return fallback;
+}
+
 function profileFromUser(user: User): DoitProfile {
   return {
     id: user.id,
@@ -67,17 +73,30 @@ export async function saveMyProfile(user: User, values: Omit<DoitProfile, 'id'>)
   if (displayName.length < 2) throw new Error('Use at least 2 characters for your name.');
   if (displayName.length > 80) throw new Error('Keep your name under 80 characters.');
 
-  const { error: profileError } = await supabase.from('profiles').upsert({
-    id: user.id,
-    display_name: displayName,
-    avatar_url: values.avatarPath ?? values.avatarUrl ?? null,
-    gender: values.gender,
-  }, { onConflict: 'id' });
-  if (profileError) throw profileError;
+  const storedAvatar = values.avatarPath ?? values.avatarUrl ?? null;
+  const { error: rpcError } = await supabase.rpc('update_my_profile', {
+    p_display_name: displayName,
+    p_avatar_path: storedAvatar,
+    p_gender: values.gender,
+  });
+  if (rpcError) {
+    // Older live databases may not have migration 022 yet. Updating the
+    // existing profile row avoids the Founding 50 referral_code upsert bug.
+    if (rpcError.code !== 'PGRST202' && !/function .*update_my_profile.*not found|schema cache/i.test(rpcError.message)) {
+      throw new Error(errorMessage(rpcError, 'Could not save your profile.'));
+    }
+    const { data: updated, error: updateError } = await supabase.from('profiles').update({
+      display_name: displayName,
+      avatar_url: storedAvatar,
+      gender: values.gender,
+    }).eq('id', user.id).select('id').maybeSingle();
+    if (updateError) throw new Error(errorMessage(updateError, 'Could not save your profile.'));
+    if (!updated) throw new Error('Your profile record is missing. Apply database migration 022 and try again.');
+  }
 
   const { data, error: authError } = await supabase.auth.updateUser({
     data: { name: displayName, display_name: displayName, avatar_url: values.avatarPath ?? values.avatarUrl ?? null, gender: values.gender },
   });
-  if (authError) throw authError;
+  if (authError) throw new Error(errorMessage(authError, 'Your profile saved, but your account name could not refresh.'));
   return data.user;
 }

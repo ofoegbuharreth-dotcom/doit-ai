@@ -72,6 +72,7 @@ function normaliseReleaseNotes(value) {
 }
 
 async function checkForUpdates() {
+  if (['downloading', 'downloaded'].includes(updateState.phase)) return updateState;
   if (!updateSupported()) {
     return publishUpdateState({
       phase: 'unsupported',
@@ -89,7 +90,9 @@ async function checkForUpdates() {
 }
 
 function configureUpdater() {
-  autoUpdater.autoDownload = false;
+  // Download verified GitHub releases in the background. The renderer only
+  // asks the user to restart once the update is fully ready—never to rerun an installer.
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.on('checking-for-update', () => publishUpdateState({ phase: 'checking', message: undefined }));
@@ -258,7 +261,10 @@ if (!gotLock) {
 
     createWindow();
     configureUpdater();
-    if (app.isPackaged) setTimeout(() => { void checkForUpdates(); }, 8_000);
+    if (app.isPackaged) {
+      setTimeout(() => { void checkForUpdates(); }, 2_000);
+      setInterval(() => { void checkForUpdates(); }, 4 * 60 * 60 * 1000);
+    }
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

@@ -9,7 +9,7 @@ import type { AgentAction } from '@/services/agent';
 import { openCalendarBlockFromIso } from '@/services/calendar';
 import { track } from '@/services/observability';
 import { buildRecoveryChanges, materialiseRecurringTasksThrough, recoveryCandidates, type RecoveryChoice, type RecurrenceChoice } from '@/services/recurrence';
-import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, type SyncState, type WorkspaceMutation } from '@/services/sync';
+import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, workspaceSyncErrorMessage, type SyncState, type WorkspaceMutation } from '@/services/sync';
 import { syncNextActionWidget } from '@/services/widget';
 import { deleteGoalProgressRecord, deleteTaskDependencyRecord, editGoalProgressRecord, fetchWorkspace, isSupabaseConfigured, logGoalProgressRecord, persistNewTask, persistTaskDependency, persistTaskStatus } from '@/services/supabase';
 
@@ -39,6 +39,7 @@ interface AppStore {
   progressError: string | null;
   coachSaving: boolean;
   refreshWorkspace: () => Promise<void>;
+  retrySync: () => Promise<void>;
   ensureTodayPlan: (force?: boolean) => Promise<Task[]>;
   setDraft: (draft: GoalDraft | null) => void;
   setGeneratedPlan: (plan: GoalPlanResponse | null) => void;
@@ -108,7 +109,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
       setLastSyncedAt(new Date().toISOString());
       setSyncState(pendingChangesRef.current ? 'saving' : 'synced');
     } catch (error) {
-      setSyncError(error instanceof Error ? error.message : 'Could not load your Supabase data.');
+      setSyncError(workspaceSyncErrorMessage(error, 'Could not load your Supabase data.'));
       setSyncState(isRetryableSyncError(error) ? 'offline' : 'error');
     } finally { setSyncing(false); }
   }, [user]);
@@ -129,7 +130,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
       const remaining = await getPendingWorkspaceMutationCount(user.id);
       updatePendingChanges(remaining);
       setSyncState(isRetryableSyncError(error) ? 'offline' : 'error');
-      if (!isRetryableSyncError(error)) setSyncError(error instanceof Error ? error.message : 'A queued change could not be saved.');
+      if (!isRetryableSyncError(error)) setSyncError(workspaceSyncErrorMessage(error, 'A queued change could not be saved.'));
     }
   }, [refreshWorkspace, updatePendingChanges, user]);
 
@@ -157,11 +158,17 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
         setSyncState('offline');
         return { queued: true };
       }
-      const message = error instanceof Error ? error.message : 'This change could not be saved.';
+      const message = workspaceSyncErrorMessage(error);
       setSyncState('error'); setSyncError(message);
       return { error: message };
     }
   }, [flushPendingChanges, updatePendingChanges, user]);
+
+  const retrySync = useCallback(async () => {
+    setSyncError(null);
+    await flushPendingChanges();
+    if (!pendingChangesRef.current) await refreshWorkspace();
+  }, [flushPendingChanges, refreshWorkspace]);
 
   useEffect(() => {
     refreshWorkspace();
@@ -512,7 +519,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     }
   }, [addActivity, taskDependencies, tasks, user?.id]);
 
-  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, recurrenceRules, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions, setTaskDependency, setTaskRecurrence, clearTaskRecurrence, recoverRecurringActions }), [activity, applyAgentActions, calendarItems, checkIns, clearTaskRecurrence, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, recurrenceRules, recoverRecurringActions, refreshWorkspace, replaceTask, replacingTaskId, setTaskDependency, setTaskRecurrence, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, taskDependencies, tasks, updateGoal, updateTask, weeklyReviews]);
+  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, recurrenceRules, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, retrySync, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions, setTaskDependency, setTaskRecurrence, clearTaskRecurrence, recoverRecurringActions }), [activity, applyAgentActions, calendarItems, checkIns, clearTaskRecurrence, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, recurrenceRules, recoverRecurringActions, refreshWorkspace, replaceTask, replacingTaskId, retrySync, setTaskDependency, setTaskRecurrence, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, taskDependencies, tasks, updateGoal, updateTask, weeklyReviews]);
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
 }
 

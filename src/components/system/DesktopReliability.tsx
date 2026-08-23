@@ -10,7 +10,7 @@ import { colors, radius, spacing } from '@/theme';
 import { Text } from '@/components/ui';
 
 export function DesktopReliability() {
-  const { isDesktop, state, download, install } = useDesktopUpdate();
+  const { isDesktop, state, install } = useDesktopUpdate();
   const [online, setOnline] = useState(true);
   const [dismissedVersion, setDismissedVersion] = useState<string>();
 
@@ -44,22 +44,22 @@ export function DesktopReliability() {
         <Pressable disabled={downloading} style={StyleSheet.absoluteFill} onPress={() => setDismissedVersion(state.availableVersion)} />
         <Animated.View accessibilityViewIsModal entering={FadeInDown.duration(260).springify().damping(22)} style={styles.dialog}>
           <View style={styles.headingRow}>
-            <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-up'} color={colors.onAccent} size={23} /></View>
-            <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready when you are.' : `Version ${state.availableVersion ?? ''} is ready.`}</Text></View>
+            <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-down'} color={colors.onAccent} size={23} /></View>
+            <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready to restart.' : downloading ? `Downloading version ${state.availableVersion ?? ''}…` : `Version ${state.availableVersion ?? ''} is available.`}</Text></View>
           </View>
-          {downloaded ? <Text color="secondary">Restart DOIT to finish installing the update. Your current work is already saved.</Text> : null}
+          <Text color="secondary">{downloaded ? 'Click once and DOIT will close, install the update, and reopen itself. Your work is already saved.' : 'DOIT is downloading this update securely in the background. You can keep working.'}</Text>
           <View style={styles.summary}><Text variant="eyebrow" color="accent">WHY UPDATE</Text><Text color="secondary">{summary}</Text></View>
           {notes.highlights.length ? <View style={styles.notes}><Text variant="eyebrow" color="accent">WHAT THIS UPDATE INCLUDES</Text>{notes.highlights.map((highlight) => <View key={highlight} style={styles.note}><View style={styles.noteIcon}><Ionicons name="checkmark" color={colors.accent} size={13} /></View><Text variant="caption" style={styles.flex}>{highlight}</Text></View>)}</View> : null}
           {downloading ? <View style={styles.progressBlock}>
             <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${state.percent ?? 0}%` }]} /></View>
             <Text variant="caption" color="secondary">Downloading securely · {state.percent ?? 0}%</Text>
           </View> : null}
-          <Pressable disabled={downloading} onPress={downloaded ? install : download} style={[styles.primary, downloading && styles.disabled]}>
-            <Ionicons name={downloaded ? 'refresh' : 'download-outline'} color={colors.onAccent} size={19} />
-            <Text variant="label" style={styles.primaryText}>{downloaded ? 'Restart and update' : downloading ? 'Downloading…' : 'Download update'}</Text>
-          </Pressable>
-          {!downloading ? <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Not now'}</Text></Pressable> : null}
-          {!downloading ? <Pressable onPress={() => { setDismissedVersion(state.availableVersion); router.push('/version-logs' as never); }} style={styles.logs}><Ionicons name="newspaper-outline" color={colors.textMuted} size={16} /><Text variant="caption" color="muted">View all version logs</Text></Pressable> : null}
+          {downloaded ? <Pressable onPress={install} style={styles.primary}>
+            <Ionicons name="refresh" color={colors.onAccent} size={19} />
+            <Text variant="label" style={styles.primaryText}>Restart DOIT AI</Text>
+          </Pressable> : null}
+          <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Keep working'}</Text></Pressable>
+          <Pressable onPress={() => { setDismissedVersion(state.availableVersion); router.push('/version-logs' as never); }} style={styles.logs}><Ionicons name="newspaper-outline" color={colors.textMuted} size={16} /><Text variant="caption" color="muted">View all version logs</Text></Pressable>
         </Animated.View>
       </View>
     </Modal>

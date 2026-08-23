@@ -96,7 +96,10 @@ export async function persistNewTask(task: Task) {
 }
 
 export async function persistActivity(activity: GoalActivity) {
-  return supabase.from('goal_activity').upsert({ id: activity.id, user_id: activity.userId, goal_id: activity.goalId ?? null, type: activity.type, title: activity.title, detail: activity.detail ?? null, created_at: activity.createdAt });
+  const payload = { id: activity.id, user_id: activity.userId, goal_id: activity.goalId ?? null, type: activity.type, title: activity.title, detail: activity.detail ?? null, created_at: activity.createdAt };
+  const result = await supabase.from('goal_activity').upsert(payload);
+  if (result.error?.code === '23503' && activity.goalId) return supabase.from('goal_activity').upsert({ ...payload, goal_id: null });
+  return result;
 }
 
 export async function logGoalProgressRecord(goalId: string, amount: number, note?: string) {

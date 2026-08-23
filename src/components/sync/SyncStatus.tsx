@@ -14,10 +14,10 @@ const presentation = {
 } as const;
 
 export function SyncStatus() {
-  const { syncState, pendingChanges, refreshWorkspace } = useAppStore();
+  const { syncState, pendingChanges, retrySync } = useAppStore();
   const state = presentation[syncState];
   const label = pendingChanges ? `${state.label} · ${pendingChanges} waiting` : state.label;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Refresh now.`} onPress={() => refreshWorkspace()} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Retry sync now.`} onPress={() => retrySync()} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
     <Ionicons name={state.icon} color={state.color} size={15} />
     <Text variant="caption" style={{ color: state.color }}>{label}</Text>
   </Pressable>;

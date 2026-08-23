@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router as expoRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router as expoRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, SlideInDown, ZoomIn } from 'react-native-reanimated';
 
@@ -14,7 +14,7 @@ import { Button, Card, ProgressBar, Screen, SectionHeader, Text } from '@/compon
 import { useAuth, useSubscription } from '@/hooks';
 import { useAppStore } from '@/stores';
 import { confirmStripeCancellation } from '@/services/purchases';
-import { getFirstRunActivation, type FirstRunActivation } from '@/services';
+import { getFirstRunActivation, getMyProfile, type FirstRunActivation } from '@/services';
 import { recoveryCandidates, recurringLabel, type RecoveryChoice } from '@/services/recurrence';
 import { colors, radius, spacing } from '@/theme';
 import type { TaskStatus } from '@/types';
@@ -27,14 +27,22 @@ export default function TodayScreen() {
   const params = useLocalSearchParams<{ stripe_return?: string }>();
   const { user } = useAuth();
   const { adaptationLimit, planName } = useSubscription();
-  const { goals, tasks, activity, recurrenceRules, updateTask, replaceTask, replacingTaskId, checkIns, submitCheckIn, syncing, syncError, refreshWorkspace, planningToday, dailyPlanError, ensureTodayPlan, recoverRecurringActions } = useAppStore();
+  const { goals, tasks, activity, recurrenceRules, updateTask, replaceTask, replacingTaskId, checkIns, submitCheckIn, syncing, syncError, refreshWorkspace, retrySync, planningToday, dailyPlanError, ensureTodayPlan, recoverRecurringActions } = useAppStore();
   const [checkIn, setCheckIn] = useState(false);
   const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const [cancellationNotice, setCancellationNotice] = useState<'sending' | 'sent' | 'error'>();
+  const [profileFirstName, setProfileFirstName] = useState('');
   const [activation, setActivation] = useState<FirstRunActivation | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false); const [recoveryWorking, setRecoveryWorking] = useState(false); const [recoveryError, setRecoveryError] = useState('');
   useEffect(() => { getFirstRunActivation().then((value) => setActivation(value?.phase === 'plan_ready' ? value : null)).catch(() => undefined); }, []);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    if (user && 'user_metadata' in user) {
+      getMyProfile(user).then((value) => { if (active) setProfileFirstName(value.displayName.trim().split(/\s+/)[0] ?? ''); }).catch(() => undefined);
+    }
+    return () => { active = false; };
+  }, [user]));
   useEffect(() => { if (!celebrating) return; const timer = setTimeout(() => setCelebrating(false), 1750); return () => clearTimeout(timer); }, [celebrating]);
   useEffect(() => {
     if (params.stripe_return !== 'cancelled') return;
@@ -58,8 +66,8 @@ export default function TodayScreen() {
   const missedRoutineActions = useMemo(() => recoveryCandidates(tasks.filter((task) => !task.goalId || activeGoalIds.has(task.goalId)), today()), [activeGoalIds, tasks]);
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
   const replacementsThisMonth = activity.filter((item) => item.title === 'DOIT created an easier next move' && new Date(item.createdAt) >= monthStart).length;
-  const metadataName = user && 'user_metadata' in user ? user.user_metadata?.name : undefined;
-  const personName = String(metadataName || user?.email?.split('@')[0] || 'there').trim().split(/\s+/)[0];
+  const metadataName = user && 'user_metadata' in user ? user.user_metadata?.name ?? user.user_metadata?.display_name : undefined;
+  const personName = profileFirstName || String(metadataName || user?.email?.split('@')[0] || 'there').trim().split(/\s+/)[0];
   const act = (taskId: string, status: TaskStatus) => { updateTask(taskId, status); if (status === 'completed') setCelebrating(true); };
   const adaptationLimitReached = replacementsThisMonth >= adaptationLimit;
   const requestReplacement = (taskId: string) => { if (adaptationLimitReached) router.push('/pro'); else replaceTask(taskId, 'This action felt blocked or too difficult'); };
@@ -74,7 +82,7 @@ export default function TodayScreen() {
     <Screen scrollable refreshing={syncing} onRefresh={refreshWorkspace} contentContainerStyle={styles.screen}>
       <View style={styles.heroTop}><View style={styles.hero}><Text variant="body" color="secondary">{greeting()}, {personName}!</Text><Text variant="title">Today</Text><Text color="secondary">One clear move. Then the next.</Text></View><SyncStatus /></View>
       {cancellationNotice ? <Card style={styles.cancellationNotice}><Ionicons name={cancellationNotice === 'sent' ? 'checkmark-circle' : cancellationNotice === 'error' ? 'alert-circle' : 'mail-outline'} color={cancellationNotice === 'error' ? colors.danger : cancellationNotice === 'sent' ? colors.success : colors.accent} size={22} /><View style={styles.cancellationCopy}><Text variant="label">{cancellationNotice === 'sending' ? 'Confirming your cancellation…' : cancellationNotice === 'sent' ? 'Cancellation confirmed' : 'Cancellation confirmed, but the email needs another try'}</Text><Text variant="caption" color="secondary">{cancellationNotice === 'sending' ? 'DOIT is checking Stripe and sending the cancellation email.' : cancellationNotice === 'sent' ? 'The owner notification was sent successfully.' : 'Open Manage subscription and return here to retry, or contact support.'}</Text></View></Card> : null}
-      {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Try again" variant="secondary" onPress={refreshWorkspace} /></Card> : null}
+      {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Retry queued changes" variant="secondary" onPress={retrySync} /></Card> : null}
       {dailyPlanError ? <Card style={styles.syncError}><Text variant="label" color="danger">Today’s plan needs another try</Text><Text variant="caption" color="secondary">{dailyPlanError}</Text><Button label="Build today’s plan" variant="secondary" onPress={() => ensureTodayPlan(true)} /></Card> : null}
       {activation?.goalId ? <Card style={styles.activationCard}><View style={styles.activationIcon}><Ionicons name="rocket" color={colors.accent} size={22} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">FINISH YOUR 5-MINUTE SETUP</Text><Text variant="heading">Your first move is waiting.</Text><Text variant="caption" color="secondary">Complete it now to turn your new goal into real momentum.</Text></View><Button label="Finish setup" icon="arrow-forward" onPress={() => router.push(`/activation-action?goalId=${encodeURIComponent(activation.goalId!)}${activation.taskId ? `&taskId=${encodeURIComponent(activation.taskId)}` : ''}`)} /></Card> : null}
       {missedRoutineActions.length ? <Card style={styles.recoveryCard}><View style={styles.recoveryTop}><View style={styles.recoveryIcon}><Ionicons name="refresh" color={colors.accent} size={21} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">RECOVERY MODE</Text><Text variant="heading">No guilt. Let’s reset the routine.</Text></View></View><Text color="secondary">{missedRoutineActions.length} repeating {missedRoutineActions.length === 1 ? 'action is' : 'actions are'} waiting. DOIT can clear or rebalance them without piling everything onto today.</Text><Button label="Reset my routine" variant="secondary" icon="options-outline" onPress={() => setRecoveryOpen(true)} /></Card> : null}

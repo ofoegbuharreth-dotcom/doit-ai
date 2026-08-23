@@ -14,6 +14,9 @@ import {
   persistTaskStatus,
 } from '@/services/supabase/repository';
 import { supabase } from '@/services/supabase/client';
+import { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
+
+export { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 
 export type SyncState = 'syncing' | 'saving' | 'synced' | 'offline' | 'error';
 
@@ -88,12 +91,20 @@ export async function executeWorkspaceMutation(mutation: WorkspaceMutation) {
 export async function flushWorkspaceQueue(userId: string) {
   const queue = await readQueue(userId);
   let completed = 0;
+  let processed = 0;
+  let discarded = 0;
   for (const item of queue) {
-    await executeWorkspaceMutation(item.mutation);
-    completed += 1;
-    await writeQueue(userId, queue.slice(completed));
+    try {
+      await executeWorkspaceMutation(item.mutation);
+      completed += 1;
+    } catch (error) {
+      if (!isSafelyStaleQueuedMutation(error, item.mutation)) throw error;
+      discarded += 1;
+    }
+    processed += 1;
+    await writeQueue(userId, queue.slice(processed));
   }
-  return { completed, remaining: queue.length - completed };
+  return { completed, discarded, remaining: queue.length - processed };
 }
 
 export async function getPendingWorkspaceMutationCount(userId: string) {
@@ -101,7 +112,7 @@ export async function getPendingWorkspaceMutationCount(userId: string) {
 }
 
 export function isRetryableSyncError(error: unknown) {
-  const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error);
+  const message = workspaceSyncErrorMessage(error, String(error));
   return /network|fetch|offline|timed?\s*out|connection|socket|failed to send|load failed/i.test(message);
 }
 

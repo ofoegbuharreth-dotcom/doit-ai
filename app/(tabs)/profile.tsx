@@ -84,7 +84,7 @@ export default function ProfileScreen() {
       await saveMyProfile(user, { displayName: profileName, avatarUrl: profileAvatar, avatarPath: profileAvatarPath, gender: profileGender });
       const next = { id: user.id, displayName: profileName.trim(), avatarUrl: profileAvatar, avatarPath: profileAvatarPath, gender: profileGender };
       setProfile(next); setProfileModalVisible(false);
-    } catch (value) { setProfileError(value instanceof Error ? value.message : 'Could not save your profile.'); }
+    } catch (value) { setProfileError(value instanceof Error ? value.message : value && typeof value === 'object' && 'message' in value ? String(value.message) : 'Could not save your profile.'); }
     finally { setProfileSaving(false); }
   };
   const invite = async () => {
@@ -184,7 +184,7 @@ export default function ProfileScreen() {
       {desktopInfo ? <Card style={styles.about}>
         <View style={styles.appearanceHeading}><View style={[styles.appearanceIcon, { backgroundColor: palette.muted }]}><Ionicons name="desktop-outline" color={palette.accent} size={21} /></View><View style={styles.flex}><Text variant="heading">About DOIT AI</Text><Text variant="caption" color="muted">Desktop version {desktopInfo.appVersion} · {desktopInfo.platform === 'win32' ? 'Windows' : desktopInfo.platform === 'darwin' ? 'macOS' : desktopInfo.platform}</Text></View></View>
         <View style={styles.versionRow}><View><Text variant="label">Updates</Text><Text variant="caption" color={desktopUpdate.state.phase === 'error' ? 'danger' : 'muted'}>{desktopUpdate.state.phase === 'checking' ? 'Checking for a new version…' : desktopUpdate.state.phase === 'available' ? `Version ${desktopUpdate.state.availableVersion} is available` : desktopUpdate.state.phase === 'downloading' ? `Downloading · ${desktopUpdate.state.percent ?? 0}%` : desktopUpdate.state.phase === 'downloaded' ? 'Update downloaded and ready' : desktopUpdate.state.message ?? 'DOIT checks automatically when it starts.'}</Text></View><Ionicons name={desktopUpdate.state.phase === 'downloaded' ? 'checkmark-circle' : 'cloud-download-outline'} color={desktopUpdate.state.phase === 'downloaded' ? colors.success : colors.textSecondary} size={22} /></View>
-        {desktopUpdate.state.phase === 'downloaded' ? <Button label="Restart and update" icon="refresh" onPress={desktopUpdate.install} /> : desktopUpdate.state.phase === 'available' ? <Button label={`Download version ${desktopUpdate.state.availableVersion}`} icon="download-outline" onPress={desktopUpdate.download} /> : <Button label="Check for updates" variant="secondary" icon="refresh-outline" disabled={desktopUpdate.state.phase === 'checking' || desktopUpdate.state.phase === 'downloading'} onPress={desktopUpdate.check} />}
+        {desktopUpdate.state.phase === 'downloaded' ? <Button label="Restart DOIT AI" icon="refresh" onPress={desktopUpdate.install} /> : ['available', 'downloading'].includes(desktopUpdate.state.phase) ? <Button label={desktopUpdate.state.phase === 'downloading' ? `Downloading automatically · ${desktopUpdate.state.percent ?? 0}%` : 'Preparing automatic download…'} icon="cloud-download-outline" disabled /> : <Button label="Check for updates" variant="secondary" icon="refresh-outline" disabled={desktopUpdate.state.phase === 'checking'} onPress={desktopUpdate.check} />}
         <Text variant="caption" color="muted">Electron {desktopInfo.electronVersion} · Updates are verified against the official DOIT AI GitHub release feed.</Text>
       </Card> : null}
       <Card style={styles.devices}>
