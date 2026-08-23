@@ -1,13 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 
 import { initialActivity, initialGoals, initialMilestones, initialTasks, demoUserId } from '@/constants/mock-data';
-import type { CalendarItem, DailyCheckIn, FocusSession, Goal, GoalActivity, GoalDraft, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, Task, TaskDependency, TaskStatus, WeeklyReview } from '@/types';
+import type { CalendarItem, DailyCheckIn, FocusSession, Goal, GoalActivity, GoalDraft, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, RecurrenceRule, Task, TaskDependency, TaskStatus, WeeklyReview } from '@/types';
 import { today, tomorrow } from '@/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { aiProvider } from '@/services/ai';
 import type { AgentAction } from '@/services/agent';
 import { openCalendarBlockFromIso } from '@/services/calendar';
 import { track } from '@/services/observability';
+import { buildRecoveryChanges, materialiseRecurringTasksThrough, recoveryCandidates, type RecoveryChoice, type RecurrenceChoice } from '@/services/recurrence';
 import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, type SyncState, type WorkspaceMutation } from '@/services/sync';
 import { syncNextActionWidget } from '@/services/widget';
 import { deleteGoalProgressRecord, deleteTaskDependencyRecord, editGoalProgressRecord, fetchWorkspace, isSupabaseConfigured, logGoalProgressRecord, persistNewTask, persistTaskDependency, persistTaskStatus } from '@/services/supabase';
@@ -23,6 +24,7 @@ interface AppStore {
   taskDependencies: TaskDependency[];
   calendarItems: CalendarItem[];
   weeklyReviews: WeeklyReview[];
+  recurrenceRules: RecurrenceRule[];
   draft: GoalDraft | null;
   generatedPlan: GoalPlanResponse | null;
   syncing: boolean;
@@ -52,6 +54,9 @@ interface AppStore {
   submitCheckIn: (mood: DailyCheckIn['mood'], accomplishment: string, blocker?: string) => void;
   applyAgentActions: (actions: AgentAction[]) => Promise<{ error?: string }>;
   setTaskDependency: (taskId: string, dependsOnTaskId?: string) => Promise<{ error?: string }>;
+  setTaskRecurrence: (taskId: string, frequency: RecurrenceChoice) => Promise<{ error?: string }>;
+  clearTaskRecurrence: (taskId: string) => Promise<{ error?: string }>;
+  recoverRecurringActions: (choice: RecoveryChoice) => Promise<{ error?: string }>;
 }
 
 const AppStoreContext = createContext<AppStore | null>(null);
@@ -71,6 +76,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   const [taskDependencies, setTaskDependencies] = useState<TaskDependency[]>([]);
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
+  const [recurrenceRules, setRecurrenceRules] = useState<RecurrenceRule[]>([]);
   const [draft, setDraft] = useState<GoalDraft | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<GoalPlanResponse | null>(null);
   const [syncing, setSyncing] = useState(isSupabaseConfigured);
@@ -98,7 +104,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     setSyncing(true); setSyncState('syncing'); setSyncError(null);
     try {
       const data = await fetchWorkspace(user.id);
-      setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions); setTaskDependencies(data.taskDependencies); setCalendarItems(data.calendarItems); setWeeklyReviews(data.weeklyReviews);
+      setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions); setTaskDependencies(data.taskDependencies); setCalendarItems(data.calendarItems); setWeeklyReviews(data.weeklyReviews); setRecurrenceRules(data.recurrenceRules);
       setLastSyncedAt(new Date().toISOString());
       setSyncState(pendingChangesRef.current ? 'saving' : 'synced');
     } catch (error) {
@@ -354,18 +360,25 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     const activeGoals = goals.filter((goal) => goal.status === 'active');
     const activeIds = new Set(activeGoals.map((goal) => goal.id));
     const existing = tasks.filter((task) => task.scheduledDate === date && (!task.goalId || activeIds.has(task.goalId)));
-    if (!activeGoals.length || (!force && existing.length)) return existing;
+    const activeRules = recurrenceRules.filter((rule) => tasks.some((task) => task.recurrenceRuleId === rule.id && (!task.goalId || activeIds.has(task.goalId))));
+    const missingRecurring = materialiseRecurringTasksThrough(tasks, activeRules, date, makeId);
+    if (!activeGoals.length || (!force && existing.length && !missingRecurring.length)) return existing;
     planningRef.current = true; setPlanningToday(true); setDailyPlanError(null);
     let prepared: Task[] = [];
     try {
-      const overdue = tasks.filter((task) => task.status === 'pending' && task.scheduledDate < date && task.goalId && activeIds.has(task.goalId)).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)).slice(0, 2);
+      const recurring = missingRecurring;
+      if (recurring.length) {
+        setTasks((current) => [...recurring, ...current]);
+        if (isSupabaseConfigured) await Promise.all(recurring.map(persistNewTask));
+      }
+      const overdue = tasks.filter((task) => !task.recurrenceRuleId && task.status === 'pending' && task.scheduledDate < date && task.goalId && activeIds.has(task.goalId)).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)).slice(0, 2);
       const carried = overdue.map((task): Task => ({ ...task, scheduledDate: date, moveCount: task.moveCount + 1 }));
       if (carried.length) {
         const carriedIds = new Set(carried.map((task) => task.id));
         setTasks((current) => current.map((task) => carriedIds.has(task.id) ? carried.find((item) => item.id === task.id)! : task));
         if (isSupabaseConfigured) await Promise.all(carried.map((task) => persistTaskStatus(task, 'pending')));
       }
-      const slots = Math.max(0, 3 - carried.length);
+      const slots = Math.max(0, 3 - carried.length - recurring.length);
       const generated: Task[] = [];
       const carriedGoalIds = new Set(carried.map((task) => task.goalId));
       const planningOrder = [...activeGoals.filter((goal) => !carriedGoalIds.has(goal.id)), ...activeGoals.filter((goal) => carriedGoalIds.has(goal.id))];
@@ -384,12 +397,50 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
         setTasks((current) => [...carried.filter((item) => !current.some((task) => task.id === item.id)), ...generated, ...current]);
         if (isSupabaseConfigured) await Promise.all(generated.map(persistNewTask));
       }
-      prepared = [...carried, ...generated];
-      if (carried.length || generated.length) addActivity({ type: 'plan_adjusted', title: 'Your morning plan is ready', detail: `${carried.length + generated.length} focused action${carried.length + generated.length === 1 ? '' : 's'} for today` });
+      prepared = [...recurring, ...carried, ...generated];
+      if (recurring.length || carried.length || generated.length) { const total = recurring.length + carried.length + generated.length; addActivity({ type: 'plan_adjusted', title: 'Your morning plan is ready', detail: `${total} focused action${total === 1 ? '' : 's'} for today` }); }
     } catch (error) { setDailyPlanError(error instanceof Error ? error.message : 'Could not build today’s plan.'); }
     finally { planningRef.current = false; setPlanningToday(false); }
     return prepared;
-  }, [addActivity, checkIns, goals, milestones, syncing, tasks, user?.id]);
+  }, [addActivity, checkIns, goals, milestones, recurrenceRules, syncing, tasks, user?.id]);
+
+  const setTaskRecurrence = useCallback(async (taskId: string, frequency: RecurrenceChoice) => {
+    const selected = tasks.find((task) => task.id === taskId);
+    if (!selected) return { error: 'That action is no longer available.' };
+    const now = new Date().toISOString();
+    const rule: RecurrenceRule = { id: selected.recurrenceRuleId ?? makeId(), userId: selected.userId, frequency, interval: 1, startsOn: selected.scheduledDate, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', createdAt: now, updatedAt: now };
+    const updated = { ...selected, recurrenceRuleId: rule.id };
+    setRecurrenceRules((current) => [rule, ...current.filter((item) => item.id !== rule.id)]);
+    setTasks((current) => current.map((task) => task.id === taskId ? updated : task));
+    const result = await commitMutation({ type: 'recurrence_rule', rule, task: updated });
+    if (result.error) return { error: result.error };
+    addActivity({ goalId: selected.goalId, type: 'plan_adjusted', title: `Made “${selected.title}” recurring`, detail: frequency === 'daily' ? 'Repeats every day' : frequency === 'weekdays' ? 'Repeats every weekday' : 'Repeats every week' });
+    return {};
+  }, [addActivity, commitMutation, tasks]);
+
+  const clearTaskRecurrence = useCallback(async (taskId: string) => {
+    const selected = tasks.find((task) => task.id === taskId); const ruleId = selected?.recurrenceRuleId;
+    if (!selected || !ruleId) return {};
+    setRecurrenceRules((current) => current.filter((rule) => rule.id !== ruleId));
+    setTasks((current) => current.map((task) => task.recurrenceRuleId === ruleId ? { ...task, recurrenceRuleId: undefined } : task));
+    const result = await commitMutation({ type: 'recurrence_remove', ruleId });
+    if (result.error) return { error: result.error };
+    addActivity({ goalId: selected.goalId, type: 'plan_adjusted', title: `Stopped repeating “${selected.title}”` });
+    return {};
+  }, [addActivity, commitMutation, tasks]);
+
+  const recoverRecurringActions = useCallback(async (choice: RecoveryChoice) => {
+    const activeIds = new Set(goals.filter((goal) => goal.status === 'active').map((goal) => goal.id));
+    const overdue = recoveryCandidates(tasks.filter((task) => !task.goalId || activeIds.has(task.goalId)), today());
+    if (!overdue.length) return {};
+    const changed = buildRecoveryChanges(overdue, today(), choice);
+    setTasks((current) => current.map((task) => changed.find((item) => item.id === task.id) ?? task));
+    try {
+      if (isSupabaseConfigured) await Promise.all(changed.map((task) => commitMutation({ type: 'task_changes', task })));
+      addActivity({ type: 'plan_adjusted', title: 'Your routine was reset without guilt', detail: choice === 'light' ? 'One action kept for today; the backlog was cleared.' : choice === 'spread' ? 'Missed actions were spread across three manageable days.' : 'The old backlog was cleared so you can restart fresh.' });
+      return {};
+    } catch (error) { return { error: error instanceof Error ? error.message : 'Could not rebuild your routine.' }; }
+  }, [addActivity, commitMutation, goals, tasks]);
 
   const submitCheckIn = useCallback((mood: DailyCheckIn['mood'], accomplishment: string, blocker?: string) => {
     const checkIn: DailyCheckIn = { id: makeId(), userId: user?.id ?? demoUserId, date: today(), mood, blocker, accomplishment, createdAt: new Date().toISOString() };
@@ -461,7 +512,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     }
   }, [addActivity, taskDependencies, tasks, user?.id]);
 
-  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions, setTaskDependency }), [activity, applyAgentActions, calendarItems, checkIns, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, refreshWorkspace, replaceTask, replacingTaskId, setTaskDependency, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, taskDependencies, tasks, updateGoal, updateTask, weeklyReviews]);
+  const value = useMemo(() => ({ goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, recurrenceRules, draft, generatedPlan, syncing, syncState, pendingChanges, lastSyncedAt, syncError, replacingTaskId, planningToday, dailyPlanError, progressSaving, progressError, coachSaving, refreshWorkspace, ensureTodayPlan, setDraft, setGeneratedPlan, startGeneratedGoal, updateTask, completeFocusedTask, replaceTask, updateGoal, deleteGoal, logProgress, editProgress, deleteProgress, submitCheckIn, applyAgentActions, setTaskDependency, setTaskRecurrence, clearTaskRecurrence, recoverRecurringActions }), [activity, applyAgentActions, calendarItems, checkIns, clearTaskRecurrence, coachSaving, completeFocusedTask, dailyPlanError, deleteGoal, deleteProgress, draft, editProgress, ensureTodayPlan, focusSessions, generatedPlan, goals, lastSyncedAt, logProgress, milestones, pendingChanges, planningToday, progressEntries, progressError, progressSaving, recurrenceRules, recoverRecurringActions, refreshWorkspace, replaceTask, replacingTaskId, setTaskDependency, setTaskRecurrence, startGeneratedGoal, submitCheckIn, syncError, syncing, syncState, taskDependencies, tasks, updateGoal, updateTask, weeklyReviews]);
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
 }
 

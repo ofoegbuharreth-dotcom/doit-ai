@@ -7,7 +7,7 @@ import { Card, Pill, Text } from '@/components/ui';
 import { colors, radius, spacing } from '@/theme';
 import type { Goal, Task, TaskStatus } from '@/types';
 
-export function TaskCard({ task, goal, onAction }: { task: Task; goal?: Goal; onAction: (status: TaskStatus) => void }) {
+export function TaskCard({ task, goal, onAction, recurrenceLabel, onRepeat }: { task: Task; goal?: Goal; onAction: (status: TaskStatus) => void; recurrenceLabel?: string; onRepeat?: () => void }) {
   const act = (status: TaskStatus) => { Haptics.selectionAsync().catch(() => undefined); onAction(status); };
   return (
     <Animated.View layout={LinearTransition.springify()} exiting={FadeOutUp}>
@@ -18,8 +18,8 @@ export function TaskCard({ task, goal, onAction }: { task: Task; goal?: Goal; on
         <View style={styles.content}>
           <Text variant="label" style={task.status === 'completed' ? styles.strike : undefined}>{task.title}</Text>
           {task.description ? <Text variant="caption" color="secondary">{task.description}</Text> : null}
-          <Text variant="caption" color="muted">{goal?.title ?? 'Goal'} · {task.estimatedMinutes} min</Text>
-          {task.status === 'pending' ? <View style={styles.actions}><Pill>{task.priority}</Pill><Pressable hitSlop={10} onPress={() => act('skipped')}><Text variant="caption" color="muted">Skip</Text></Pressable><Pressable hitSlop={10} onPress={() => act('moved')}><Text variant="caption" color="secondary">Tomorrow</Text></Pressable></View> : null}
+          <Text variant="caption" color="muted">{goal?.title ?? 'Goal'} · {task.estimatedMinutes} min{recurrenceLabel ? ` · ${recurrenceLabel}` : ''}</Text>
+          {task.status === 'pending' ? <View style={styles.actions}><Pill>{task.priority}</Pill>{onRepeat ? <Pressable hitSlop={10} onPress={onRepeat}><Text variant="caption" color={recurrenceLabel ? 'accent' : 'secondary'}>{recurrenceLabel ? 'Repeating' : 'Repeat'}</Text></Pressable> : null}<Pressable hitSlop={10} onPress={() => act('skipped')}><Text variant="caption" color="muted">Skip</Text></Pressable><Pressable hitSlop={10} onPress={() => act('moved')}><Text variant="caption" color="secondary">Tomorrow</Text></Pressable></View> : null}
         </View>
       </Card>
     </Animated.View>

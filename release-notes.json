@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.2.7",
+    "date": "2026-08-23",
+    "title": "Routines that recover with you",
+    "summary": "Turn goal actions into daily, weekday, or weekly routines—and reset missed work without guilt or an impossible backlog.",
+    "highlights": [
+      "Daily, weekday, and weekly recurring actions",
+      "Automatic duplicate-safe routine scheduling",
+      "Recovery Mode for clearing or rebalancing missed actions",
+      "A capped seven-day recovery window that prevents runaway backlogs",
+      "Recurring labels and controls directly inside each goal"
+    ]
+  },
+  {
     "version": "1.2.6",
     "date": "2026-08-23",
     "title": "Cleaner desktop updates",

@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { DailyCheckIn, Goal, GoalActivity, GoalPlanResponse, Milestone, Task, TaskStatus } from '@/types';
+import type { DailyCheckIn, Goal, GoalActivity, GoalPlanResponse, Milestone, RecurrenceRule, Task, TaskStatus } from '@/types';
 import {
   deleteGoalRecord,
+  deleteRecurrenceRule,
   persistActivity,
   persistCheckIn,
   persistGoalChanges,
   persistGoalPlan,
   persistNewTask,
+  persistRecurrenceRule,
   persistTaskChanges,
   persistTaskStatus,
 } from '@/services/supabase/repository';
@@ -21,6 +23,8 @@ export type WorkspaceMutation =
   | { type: 'goal_changes'; goal: Goal }
   | { type: 'delete_goal'; goalId: string }
   | { type: 'new_task'; task: Task }
+  | { type: 'recurrence_rule'; rule: RecurrenceRule; task: Task }
+  | { type: 'recurrence_remove'; ruleId: string }
   | { type: 'check_in'; checkIn: DailyCheckIn }
   | { type: 'activity'; activity: GoalActivity }
   | { type: 'goal_plan'; goal: Goal; plan: GoalPlanResponse; tasks: Task[]; milestones: Milestone[] };
@@ -74,6 +78,8 @@ export async function executeWorkspaceMutation(mutation: WorkspaceMutation) {
   if (mutation.type === 'goal_changes') return assertResult(await persistGoalChanges(mutation.goal));
   if (mutation.type === 'delete_goal') return assertResult(await deleteGoalRecord(mutation.goalId));
   if (mutation.type === 'new_task') return assertResult(await persistNewTask(mutation.task));
+  if (mutation.type === 'recurrence_rule') { assertResult(await persistRecurrenceRule(mutation.rule)); return assertResult(await persistTaskChanges(mutation.task)); }
+  if (mutation.type === 'recurrence_remove') return assertResult(await deleteRecurrenceRule(mutation.ruleId));
   if (mutation.type === 'check_in') return assertResult(await persistCheckIn(mutation.checkIn));
   if (mutation.type === 'activity') return assertResult(await persistActivity(mutation.activity));
   return persistGoalPlan(mutation.goal, mutation.plan, mutation.tasks, mutation.milestones);
@@ -101,7 +107,7 @@ export function isRetryableSyncError(error: unknown) {
 
 export function subscribeToWorkspace(userId: string, onChange: () => void, onConnection: (connected: boolean) => void) {
   const channel = supabase.channel(`workspace-sync:${userId}:${makeId()}`);
-  const directTables = ['goals', 'tasks', 'goal_activity', 'daily_checkins', 'goal_progress_entries', 'focus_sessions', 'task_dependencies', 'calendar_items', 'weekly_reviews'] as const;
+  const directTables = ['goals', 'tasks', 'goal_activity', 'daily_checkins', 'goal_progress_entries', 'focus_sessions', 'task_dependencies', 'calendar_items', 'weekly_reviews', 'recurrence_rules'] as const;
   directTables.forEach((table) => channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `user_id=eq.${userId}` }, onChange));
   channel.on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, onChange);
   channel.subscribe((status) => onConnection(status === 'SUBSCRIBED'));

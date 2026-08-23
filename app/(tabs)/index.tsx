@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router as expoRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { AppState, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Easing, FadeInDown, FadeOutUp, ZoomIn } from 'react-native-reanimated';
+import { AppState, Modal, Pressable, StyleSheet, View } from 'react-native';
+import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, SlideInDown, ZoomIn } from 'react-native-reanimated';
 
 import { NewGoalButton } from './_layout';
 import { DailyCheckIn } from '@/components/checkins/DailyCheckIn';
@@ -15,6 +15,7 @@ import { useAuth, useSubscription } from '@/hooks';
 import { useAppStore } from '@/stores';
 import { confirmStripeCancellation } from '@/services/purchases';
 import { getFirstRunActivation, type FirstRunActivation } from '@/services';
+import { recoveryCandidates, recurringLabel, type RecoveryChoice } from '@/services/recurrence';
 import { colors, radius, spacing } from '@/theme';
 import type { TaskStatus } from '@/types';
 import { completionStreak, greeting, taskProgress, today } from '@/utils';
@@ -26,12 +27,13 @@ export default function TodayScreen() {
   const params = useLocalSearchParams<{ stripe_return?: string }>();
   const { user } = useAuth();
   const { adaptationLimit, planName } = useSubscription();
-  const { goals, tasks, activity, updateTask, replaceTask, replacingTaskId, checkIns, submitCheckIn, syncing, syncError, refreshWorkspace, planningToday, dailyPlanError, ensureTodayPlan } = useAppStore();
+  const { goals, tasks, activity, recurrenceRules, updateTask, replaceTask, replacingTaskId, checkIns, submitCheckIn, syncing, syncError, refreshWorkspace, planningToday, dailyPlanError, ensureTodayPlan, recoverRecurringActions } = useAppStore();
   const [checkIn, setCheckIn] = useState(false);
   const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const [cancellationNotice, setCancellationNotice] = useState<'sending' | 'sent' | 'error'>();
   const [activation, setActivation] = useState<FirstRunActivation | null>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false); const [recoveryWorking, setRecoveryWorking] = useState(false); const [recoveryError, setRecoveryError] = useState('');
   useEffect(() => { getFirstRunActivation().then((value) => setActivation(value?.phase === 'plan_ready' ? value : null)).catch(() => undefined); }, []);
   useEffect(() => { if (!celebrating) return; const timer = setTimeout(() => setCelebrating(false), 1750); return () => clearTimeout(timer); }, [celebrating]);
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function TodayScreen() {
   const done = todayTasks.filter((task) => task.status === 'completed').length;
   const progress = taskProgress(todayTasks);
   const streak = completionStreak(tasks);
+  const missedRoutineActions = useMemo(() => recoveryCandidates(tasks.filter((task) => !task.goalId || activeGoalIds.has(task.goalId)), today()), [activeGoalIds, tasks]);
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
   const replacementsThisMonth = activity.filter((item) => item.title === 'DOIT created an easier next move' && new Date(item.createdAt) >= monthStart).length;
   const metadataName = user && 'user_metadata' in user ? user.user_metadata?.name : undefined;
@@ -60,6 +63,7 @@ export default function TodayScreen() {
   const act = (taskId: string, status: TaskStatus) => { updateTask(taskId, status); if (status === 'completed') setCelebrating(true); };
   const adaptationLimitReached = replacementsThisMonth >= adaptationLimit;
   const requestReplacement = (taskId: string) => { if (adaptationLimitReached) router.push('/pro'); else replaceTask(taskId, 'This action felt blocked or too difficult'); };
+  const recover = async (choice: RecoveryChoice) => { setRecoveryWorking(true); setRecoveryError(''); const result = await recoverRecurringActions(choice); setRecoveryWorking(false); if (result.error) setRecoveryError(result.error); else setRecoveryOpen(false); };
   useEffect(() => {
     if (!syncing) ensureTodayPlan();
     const subscription = AppState.addEventListener('change', (state) => { if (state === 'active' && !syncing) ensureTodayPlan(); });
@@ -73,6 +77,7 @@ export default function TodayScreen() {
       {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Try again" variant="secondary" onPress={refreshWorkspace} /></Card> : null}
       {dailyPlanError ? <Card style={styles.syncError}><Text variant="label" color="danger">Today’s plan needs another try</Text><Text variant="caption" color="secondary">{dailyPlanError}</Text><Button label="Build today’s plan" variant="secondary" onPress={() => ensureTodayPlan(true)} /></Card> : null}
       {activation?.goalId ? <Card style={styles.activationCard}><View style={styles.activationIcon}><Ionicons name="rocket" color={colors.accent} size={22} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">FINISH YOUR 5-MINUTE SETUP</Text><Text variant="heading">Your first move is waiting.</Text><Text variant="caption" color="secondary">Complete it now to turn your new goal into real momentum.</Text></View><Button label="Finish setup" icon="arrow-forward" onPress={() => router.push(`/activation-action?goalId=${encodeURIComponent(activation.goalId!)}${activation.taskId ? `&taskId=${encodeURIComponent(activation.taskId)}` : ''}`)} /></Card> : null}
+      {missedRoutineActions.length ? <Card style={styles.recoveryCard}><View style={styles.recoveryTop}><View style={styles.recoveryIcon}><Ionicons name="refresh" color={colors.accent} size={21} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">RECOVERY MODE</Text><Text variant="heading">No guilt. Let’s reset the routine.</Text></View></View><Text color="secondary">{missedRoutineActions.length} repeating {missedRoutineActions.length === 1 ? 'action is' : 'actions are'} waiting. DOIT can clear or rebalance them without piling everything onto today.</Text><Button label="Reset my routine" variant="secondary" icon="options-outline" onPress={() => setRecoveryOpen(true)} /></Card> : null}
       <View style={styles.stats}>
         <Card style={styles.stat}><Ionicons name="flame" color={colors.warning} size={22} /><Text variant="heading">{streak}</Text><Text variant="caption" color="muted">day streak</Text></Card>
         <Card style={styles.statWide}><View style={styles.overviewTop}><Text variant="eyebrow" color="accent">DAILY PROGRESS</Text><Text variant="label" color="accent">{progress}%</Text></View><ProgressBar progress={progress} height={8} /><Text variant="caption" color="muted">{syncing ? 'Syncing…' : `${done} of ${todayTasks.length} complete`}</Text></Card>
@@ -97,8 +102,8 @@ export default function TodayScreen() {
         </View>
       </Card> : <Card style={styles.empty}><Text variant="heading">{todayTasks.length ? 'Today is complete.' : 'Today is clear.'}</Text><Text color="secondary">{todayTasks.length ? 'That’s enough. Protect the momentum and come back tomorrow.' : goals.some((goal) => goal.status === 'active') ? 'Your plan can be rebuilt whenever you’re ready.' : 'Create a goal and DOIT will choose your first move.'}</Text>{!todayTasks.length && goals.some((goal) => goal.status === 'active') ? <Button label="Build today’s plan" variant="secondary" icon="sparkles" onPress={() => ensureTodayPlan(true)} /> : null}</Card>}
 
-      {queue.length ? <><SectionHeader title="Up next" detail={`${queue.length}`} /><View style={styles.list}>{queue.map((task) => <TaskCard key={task.id} task={task} goal={goals.find((goal) => goal.id === task.goalId)} onAction={(status) => act(task.id, status)} />)}</View></> : null}
-      {done ? <><SectionHeader title="Completed today" detail={`${done}`} /><View style={styles.list}>{todayTasks.filter((task) => task.status === 'completed').map((task) => <TaskCard key={task.id} task={task} goal={goals.find((goal) => goal.id === task.goalId)} onAction={(status) => act(task.id, status)} />)}</View></> : null}
+      {queue.length ? <><SectionHeader title="Up next" detail={`${queue.length}`} /><View style={styles.list}>{queue.map((task) => <TaskCard key={task.id} task={task} goal={goals.find((goal) => goal.id === task.goalId)} recurrenceLabel={recurringLabel(recurrenceRules.find((rule) => rule.id === task.recurrenceRuleId))} onAction={(status) => act(task.id, status)} />)}</View></> : null}
+      {done ? <><SectionHeader title="Completed today" detail={`${done}`} /><View style={styles.list}>{todayTasks.filter((task) => task.status === 'completed').map((task) => <TaskCard key={task.id} task={task} goal={goals.find((goal) => goal.id === task.goalId)} recurrenceLabel={recurringLabel(recurrenceRules.find((rule) => rule.id === task.recurrenceRuleId))} onAction={(status) => act(task.id, status)} />)}</View></> : null}
       {!checkIns.some((item) => item.date === today()) ? <Button label="Evening check-in" variant="secondary" icon="moon-outline" onPress={() => setCheckIn(true)} /> : <Card style={styles.checkedIn}><Ionicons name="checkmark-circle" color={colors.success} size={20} /><Text variant="caption" color="secondary">Today’s reflection is saved.</Text></Card>}
       <View style={styles.bottomSpace} />
     </Screen>
@@ -109,8 +114,11 @@ export default function TodayScreen() {
     <NewGoalButton />
     <DailyCheckIn visible={checkIn} onClose={() => setCheckIn(false)} onSubmit={submitCheckIn} />
     <ProgressLogSheet visible={Boolean(progressGoalId)} goal={goals.find((goal) => goal.id === progressGoalId)} onClose={() => setProgressGoalId(null)} onSaved={(result) => { if (result.goalCompleted || result.milestone) setCelebrating(true); }} />
+    <Modal visible={recoveryOpen} transparent animationType="none" onRequestClose={() => !recoveryWorking && setRecoveryOpen(false)}><Animated.View entering={FadeIn.duration(150)} style={styles.recoveryOverlay}><Pressable style={StyleSheet.absoluteFill} disabled={recoveryWorking} onPress={() => setRecoveryOpen(false)} /><Animated.View entering={SlideInDown.springify().damping(22)} style={styles.recoverySheet}><View style={styles.handle} /><Text variant="eyebrow" color="accent">RECOVERY MODE</Text><Text variant="title">How should we restart?</Text><Text color="secondary">Missed actions are information, not failure. Choose the load that fits now.</Text><RecoveryOption icon="leaf-outline" title="Keep today light" detail="Clear the old backlog and keep only today’s regular routine." disabled={recoveryWorking} onPress={() => recover('light')} /><RecoveryOption icon="calendar-outline" title="Spread it out" detail="Rebalance missed actions across the next three days." disabled={recoveryWorking} onPress={() => recover('spread')} /><RecoveryOption icon="play-forward-outline" title="Restart fresh tomorrow" detail="Clear the backlog and continue with the next occurrence." disabled={recoveryWorking} onPress={() => recover('restart')} />{recoveryError ? <Text variant="caption" color="danger">{recoveryError}</Text> : null}<Button label="Keep everything for now" variant="ghost" disabled={recoveryWorking} onPress={() => setRecoveryOpen(false)} /></Animated.View></Animated.View></Modal>
   </>;
 }
+
+function RecoveryOption({ icon, title, detail, disabled, onPress }: { icon: keyof typeof Ionicons.glyphMap; title: string; detail: string; disabled: boolean; onPress: () => void }) { return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.recoveryChoice, pressed && styles.pressed, disabled && styles.disabled]}><View style={styles.recoveryChoiceIcon}><Ionicons name={icon} color={colors.accent} size={20} /></View><View style={styles.activationCopy}><Text variant="label">{title}</Text><Text variant="caption" color="muted">{detail}</Text></View><Ionicons name="chevron-forward" color={colors.textMuted} size={18} /></Pressable>; }
 
 function SmallAction({ icon, label, onPress, disabled }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; disabled?: boolean }) {
   return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.smallAction, pressed && styles.pressed, disabled && styles.disabled]}><Ionicons name={icon} color={colors.textSecondary} size={17} /><Text variant="caption" color="secondary">{label}</Text></Pressable>;
@@ -122,6 +130,7 @@ const styles = StyleSheet.create({
   focusCard: { backgroundColor: colors.surfaceElevated, borderColor: colors.accent, gap: spacing.md }, focusIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, meta: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   planning: { alignItems: 'center', flexDirection: 'row', gap: spacing.md }, planningCopy: { flex: 1, gap: spacing.xs }, cancellationNotice: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, cancellationCopy: { flex: 1, gap: spacing.xxs },
   activationCard: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, gap: spacing.md }, activationIcon: { alignItems: 'center', backgroundColor: colors.background, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, activationCopy: { gap: spacing.xs },
+  recoveryCard: { borderColor: colors.accentBorder, gap: spacing.md }, recoveryTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, recoveryIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, recoveryOverlay: { backgroundColor: colors.overlay, flex: 1, justifyContent: 'flex-end' }, recoverySheet: { backgroundColor: colors.surfaceElevated, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, gap: spacing.md, padding: spacing.lg, paddingBottom: spacing.xl }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: radius.pill, height: 4, width: 42 }, recoveryChoice: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 72, padding: spacing.md }, recoveryChoiceIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.sm, height: 40, justifyContent: 'center', width: 40 },
   focusActions: { flexDirection: 'row', gap: spacing.xs }, smallAction: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, gap: spacing.xxs, justifyContent: 'center', minHeight: 62, padding: spacing.xs }, pressed: { opacity: 0.7 }, disabled: { opacity: 0.45 },
   list: { gap: spacing.sm }, empty: { gap: spacing.xs }, checkedIn: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' }, bottomSpace: { height: 84 },
   celebration: { alignItems: 'center', alignSelf: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.accentBorder, borderRadius: radius.lg, borderWidth: 1, bottom: 104, flexDirection: 'row', gap: spacing.sm, maxWidth: 380, paddingHorizontal: spacing.md, paddingVertical: 12, position: 'absolute', width: '88%' }, celebrationIcon: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.pill, height: 38, justifyContent: 'center', width: 38 }, celebrationCopy: { flex: 1, gap: 1 },
