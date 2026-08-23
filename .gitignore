@@ -1,5 +1,6 @@
 node_modules/
 desktop/runtime-config.json
+build/release-notes.md
 .pnpm-store/
 .chrome-*/
 .edge-*/

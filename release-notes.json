@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.2.6",
+    "date": "2026-08-23",
+    "title": "Cleaner desktop updates",
+    "summary": "Desktop update notes now render as clean, readable summaries instead of exposing GitHub formatting tags.",
+    "highlights": [
+      "Clean update titles and summaries",
+      "Readable feature lists without HTML tags",
+      "Safer handling for GitHub Markdown and HTML release notes"
+    ]
+  },
+  {
     "version": "1.2.5",
     "date": "2026-08-23",
     "title": "A faster way into DOIT",
