@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Share } from 'react-native';
 
 import { isSupabaseConfigured, supabase } from './supabase';
+import { isShareCancellation } from './share';
 
 const PENDING_REFERRAL_KEY = 'doit:pending-referral';
 export const FOUNDING_LIMIT = 50;
@@ -73,15 +74,21 @@ export async function shareReferral(code: string) {
   const message = `I’m building my goals with DOIT AI. Join the Founding 50 and turn your goal into one clear next move: ${url}`;
   if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
     if (navigator.share) {
-      await navigator.share({ title: 'Join the DOIT AI Founding 50', text: message, url });
-      return 'shared' as const;
+      try {
+        await navigator.share({ title: 'Join the DOIT AI Founding 50', text: message, url });
+        return 'shared' as const;
+      } catch (error) {
+        if (isShareCancellation(error)) return 'cancelled' as const;
+        throw error;
+      }
     }
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(url);
       return 'copied' as const;
     }
   }
-  await Share.share({ title: 'Join the DOIT AI Founding 50', message, url });
+  const result = await Share.share({ title: 'Join the DOIT AI Founding 50', message, url });
+  if (result.action === Share.dismissedAction) return 'cancelled' as const;
   return 'shared' as const;
 }
 
@@ -99,4 +106,3 @@ export async function submitProductFeedback(input: { userId: string; category: F
   });
   if (error) throw error;
 }
-

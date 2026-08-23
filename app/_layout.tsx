@@ -11,6 +11,7 @@ import { AppStoreProvider } from '@/stores';
 import { Sentry, identifyTelemetryUser, trackScreen } from '@/services/observability';
 import { AppErrorBoundary } from '@/components/system/AppErrorBoundary';
 import { DesktopReliability } from '@/components/system/DesktopReliability';
+import { PresenceHeartbeat } from '@/components/system/PresenceHeartbeat';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -39,6 +40,7 @@ function AppProviders() {
   return <AuthProvider>
     <DeviceSessionsProvider>
       <TelemetryBridge />
+      <PresenceHeartbeat />
       <SubscriptionProvider>
         <AppStoreProvider>
           <ThemeProvider value={navigationTheme}>

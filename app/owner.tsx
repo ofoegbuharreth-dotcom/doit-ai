@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } f
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { Button, Card, Screen, Text } from '@/components/ui';
 import { useAuth } from '@/hooks';
-import { getOwnerDashboard, isOwnerEmail, setOwnerFeedbackStatus, type OwnerDashboard } from '@/services';
+import { getOwnerDashboard, getOwnerHealth, isOwnerEmail, setOwnerFeedbackStatus, type OwnerDashboard, type OwnerHealth } from '@/services';
 import { colors, radius, spacing } from '@/theme';
 
 type FeedbackStatus = OwnerDashboard['feedback'][number]['status'];
@@ -20,16 +20,24 @@ export default function OwnerDashboardScreen() {
   const compact = width < 720;
   const allowed = isOwnerEmail(user?.email);
   const [dashboard, setDashboard] = useState<OwnerDashboard>();
+  const [health, setHealth] = useState<OwnerHealth>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [healthError, setHealthError] = useState('');
   const [updatingFeedback, setUpdatingFeedback] = useState('');
 
   const load = useCallback(async (refresh = false) => {
     if (!allowed) { setLoading(false); return; }
     if (refresh) setRefreshing(true); else setLoading(true);
-    setError('');
-    try { setDashboard(await getOwnerDashboard()); }
+    setError(''); setHealthError('');
+    try {
+      const [dashboardResult, healthResult] = await Promise.allSettled([getOwnerDashboard(), getOwnerHealth()]);
+      if (dashboardResult.status === 'rejected') throw dashboardResult.reason;
+      setDashboard(dashboardResult.value);
+      if (healthResult.status === 'fulfilled') setHealth(healthResult.value);
+      else setHealthError(healthResult.reason instanceof Error ? healthResult.reason.message : 'Could not check service health.');
+    }
     catch (value) { setError(value instanceof Error ? value.message : 'Could not load owner analytics.'); }
     finally { setLoading(false); setRefreshing(false); }
   }, [allowed]);
@@ -59,6 +67,12 @@ export default function OwnerDashboardScreen() {
     </View>
     {error ? <Card style={styles.error}><Ionicons name="alert-circle" color={colors.danger} size={20} /><Text color="danger" style={styles.flex}>{error}</Text></Card> : null}
 
+    <SectionTitle title="Service health" detail="Private live checks for the systems that keep DOIT running." />
+    {healthError ? <Card style={styles.healthWarning}><Ionicons name="warning" color={colors.warning} size={20} /><Text style={styles.flex}>{healthError}</Text></Card> : null}
+    {health ? <View style={styles.healthGrid}>
+      {(['auth', 'database', 'ai', 'stripe', 'email'] as const).map((id) => <HealthCard key={id} id={id} check={health.checks.find((item) => item.id === id)} />)}
+    </View> : healthError ? null : <ActivityIndicator color={colors.accent} />}
+
     {metrics ? <>
       <SectionTitle title="Growth pulse" detail="The numbers that decide what DOIT should improve next." />
       <View style={styles.metricGrid}>
@@ -87,7 +101,7 @@ export default function OwnerDashboardScreen() {
       <Card style={styles.tableCard}>
         {dashboard?.recentUsers.length ? dashboard.recentUsers.map((item, index) => <View key={item.id} style={[styles.userRow, index > 0 && styles.rowBorder]}>
           <View style={styles.userAvatar}><Text variant="label" color="accent">{item.email?.[0]?.toUpperCase() ?? '?'}</Text></View>
-          <View style={styles.flex}><Text variant="label" numberOfLines={1}>{item.email}</Text><Text variant="caption" color="muted">Joined {formatDate(item.created_at)} · {item.goal_count ? `${item.goal_count} goal${item.goal_count === 1 ? '' : 's'}` : 'Not activated yet'}</Text></View>
+          <View style={styles.flex}><View style={styles.userNameRow}><Text variant="label" numberOfLines={1} style={styles.flex}>{item.email}</Text><View style={styles.presence}><View style={[styles.presenceDot, item.online && styles.presenceDotOnline]} /><Text variant="caption" color={item.online ? 'accent' : 'muted'}>{item.online ? 'Online now' : item.last_seen_at ? `Last seen ${formatRelative(item.last_seen_at)}` : 'Not seen yet'}</Text></View></View><Text variant="caption" color="muted">Joined {formatDate(item.created_at)} · {item.goal_count ? `${item.goal_count} goal${item.goal_count === 1 ? '' : 's'}` : 'Not activated yet'}{item.app_kind ? ` · ${appKindLabel(item.app_kind)}` : ''}</Text></View>
           <View style={styles.userTags}>{item.referred ? <Tag text="Referred" accent /> : null}<Tag text={item.plan.toUpperCase()} accent={item.plan !== 'free'} /></View>
         </View>) : <Empty text="No users yet." />}
       </Card>
@@ -107,6 +121,14 @@ export default function OwnerDashboardScreen() {
 function Metric({ label, value, detail, icon, compact }: { label: string; value: string | number; detail: string; icon: keyof typeof Ionicons.glyphMap; compact: boolean }) {
   return <Card style={[styles.metric, compact && styles.metricCompact]}><View style={styles.metricIcon}><Ionicons name={icon} color={colors.accent} size={20} /></View><Text variant="title">{value}</Text><Text variant="label">{label}</Text><Text variant="caption" color="muted">{detail}</Text></Card>;
 }
+function HealthCard({ id, check }: { id: OwnerHealth['checks'][number]['id']; check?: OwnerHealth['checks'][number] }) {
+  const meta = {
+    auth: { label: 'Auth', icon: 'key-outline' }, database: { label: 'Database', icon: 'server-outline' }, ai: { label: 'AI', icon: 'sparkles-outline' }, stripe: { label: 'Stripe', icon: 'card-outline' }, email: { label: 'Email', icon: 'mail-outline' },
+  }[id] as { label: string; icon: keyof typeof Ionicons.glyphMap };
+  const status = check?.status ?? 'degraded';
+  const colour = status === 'healthy' ? colors.success : status === 'degraded' ? colors.warning : colors.danger;
+  return <Card style={styles.healthCard}><View style={styles.healthTop}><View style={styles.smallIcon}><Ionicons name={meta.icon} color={colour} size={18} /></View><View style={styles.flex}><Text variant="label">{meta.label}</Text><View style={styles.healthStatus}><View style={[styles.healthDot, { backgroundColor: colour }]} /><Text variant="eyebrow" style={{ color: colour }}>{check ? status.toUpperCase() : 'CHECKING'}</Text></View></View></View><Text variant="caption" color="muted">{check?.summary ?? 'Running secure service check…'}</Text>{check ? <Text variant="eyebrow" color="muted">{check.latencyMs} MS</Text> : null}</Card>;
+}
 function SectionTitle({ title, detail }: { title: string; detail: string }) { return <View style={styles.sectionTitle}><Text variant="heading">{title}</Text><Text variant="caption" color="muted">{detail}</Text></View>; }
 function FunnelRow({ label, value, icon }: { label: string; value: number; icon: keyof typeof Ionicons.glyphMap }) { return <View style={styles.funnelRow}><View style={styles.smallIcon}><Ionicons name={icon} color={colors.textSecondary} size={17} /></View><Text variant="label" style={styles.flex}>{label}</Text><Text variant="heading">{value}</Text></View>; }
 function Tag({ text, accent = false }: { text: string; accent?: boolean }) { return <View style={[styles.tag, accent && styles.tagAccent]}><Text variant="eyebrow" color={accent ? 'accent' : 'muted'}>{text}</Text></View>; }
@@ -116,6 +138,8 @@ function SignupChart({ points }: { points: OwnerDashboard['dailySignups'] }) {
   return <View style={styles.chart}>{points.map((point, index) => <View key={point.date} style={styles.barColumn}><Text variant="eyebrow" color="muted">{point.count || ''}</Text><View style={styles.barTrack}><View style={[styles.bar, { height: `${Math.max(5, point.count / max * 100)}%` }]} /></View>{index % 3 === 0 || index === points.length - 1 ? <Text variant="eyebrow" color="muted">{new Date(`${point.date}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text> : <Text variant="eyebrow"> </Text>}</View>)}</View>;
 }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'recently' : date.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+function formatRelative(value: string) { const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); return seconds < 60 ? 'just now' : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago` : seconds < 86400 ? `${Math.floor(seconds / 3600)}h ago` : `${Math.floor(seconds / 86400)}d ago`; }
+function appKindLabel(value: string) { return ({ web: 'Web', 'installed-web': 'Installed web app', desktop: 'Desktop', native: 'Mobile' } as Record<string, string>)[value] ?? value; }
 function categoryLabel(value: string) { return ({ idea: 'Idea', confusing: 'Something confusing', bug: 'Bug report', love: 'What they love' } as Record<string, string>)[value] ?? value; }
 function feedbackIcon(value: string): keyof typeof Ionicons.glyphMap { return ({ idea: 'bulb', confusing: 'help-circle', bug: 'bug', love: 'heart' } as Record<string, keyof typeof Ionicons.glyphMap>)[value] ?? 'chatbubble'; }
 
@@ -123,9 +147,9 @@ const styles = StyleSheet.create({
   screen: { gap: spacing.xl, paddingBottom: spacing.xxxl }, center: { alignItems: 'center', gap: spacing.md, justifyContent: 'center' }, centerCopy: { maxWidth: 460, textAlign: 'center' }, lock: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, height: 64, justifyContent: 'center', width: 64 },
   refresh: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, height: 44, justifyContent: 'center', width: 44 },
   hero: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.accentBorder, borderRadius: radius.xl, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.xl }, heroIcon: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, height: 52, justifyContent: 'center', width: 52 }, flex: { flex: 1 }, error: { alignItems: 'center', backgroundColor: colors.dangerMuted, borderColor: colors.danger, flexDirection: 'row', gap: spacing.sm },
-  sectionTitle: { gap: spacing.xxs }, metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, metric: { flexBasis: 230, flexGrow: 1, gap: spacing.xxs, minWidth: 210 }, metricCompact: { flexBasis: 145, minWidth: 140 }, metricIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.sm, height: 38, justifyContent: 'center', marginBottom: spacing.xs, width: 38 },
+  sectionTitle: { gap: spacing.xxs }, healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, healthCard: { flexBasis: 200, flexGrow: 1, gap: spacing.sm, minWidth: 180 }, healthTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, healthStatus: { alignItems: 'center', flexDirection: 'row', gap: spacing.xxs }, healthDot: { borderRadius: radius.pill, height: 7, width: 7 }, healthWarning: { alignItems: 'center', backgroundColor: colors.warningMuted, borderColor: colors.warning, flexDirection: 'row', gap: spacing.sm }, metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, metric: { flexBasis: 230, flexGrow: 1, gap: spacing.xxs, minWidth: 210 }, metricCompact: { flexBasis: 145, minWidth: 140 }, metricIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.sm, height: 38, justifyContent: 'center', marginBottom: spacing.xs, width: 38 },
   twoColumn: { alignItems: 'stretch', flexDirection: 'row', gap: spacing.md }, stack: { flexDirection: 'column' }, panel: { flex: 1, gap: spacing.md, minHeight: 280 }, chart: { alignItems: 'flex-end', flexDirection: 'row', gap: 5, height: 175 }, barColumn: { alignItems: 'center', flex: 1, gap: spacing.xxs, height: '100%', justifyContent: 'flex-end' }, barTrack: { backgroundColor: colors.surfaceElevated, borderRadius: radius.pill, flex: 1, justifyContent: 'flex-end', overflow: 'hidden', width: '72%' }, bar: { backgroundColor: colors.accent, borderRadius: radius.pill, minHeight: 5, width: '100%' },
   funnelRow: { alignItems: 'center', borderBottomColor: colors.borderSubtle, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm }, smallIcon: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderRadius: radius.sm, height: 34, justifyContent: 'center', width: 34 },
-  tableCard: { paddingVertical: 0 }, userRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 76, paddingVertical: spacing.sm }, rowBorder: { borderTopColor: colors.borderSubtle, borderTopWidth: StyleSheet.hairlineWidth }, userAvatar: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, height: 38, justifyContent: 'center', width: 38 }, userTags: { alignItems: 'flex-end', gap: spacing.xxs }, tag: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: spacing.xs, paddingVertical: 3 }, tagAccent: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder },
+  tableCard: { paddingVertical: 0 }, userRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 76, paddingVertical: spacing.sm }, rowBorder: { borderTopColor: colors.borderSubtle, borderTopWidth: StyleSheet.hairlineWidth }, userAvatar: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, height: 38, justifyContent: 'center', width: 38 }, userNameRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, presence: { alignItems: 'center', flexDirection: 'row', gap: spacing.xxs }, presenceDot: { backgroundColor: colors.textMuted, borderRadius: radius.pill, height: 8, width: 8 }, presenceDotOnline: { backgroundColor: colors.success }, userTags: { alignItems: 'flex-end', gap: spacing.xxs }, tag: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: spacing.xs, paddingVertical: 3 }, tagAccent: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder },
   feedbackList: { gap: spacing.sm }, feedbackCard: { gap: spacing.md }, feedbackTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, feedbackIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.sm, height: 40, justifyContent: 'center', width: 40 }, statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }, status: { borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: 7 }, statusSelected: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder }, empty: { alignItems: 'center', gap: spacing.sm, justifyContent: 'center', minHeight: 120 },
 });

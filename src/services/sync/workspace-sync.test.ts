@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { bindMutationToUser } from './workspace-ownership';
-import { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
+import { isRecurrenceOwnershipMismatch, isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 
 describe('workspace sync recovery', () => {
   it('shows the useful message from Supabase error objects', () => {
@@ -26,5 +26,12 @@ describe('workspace sync recovery', () => {
     if (mutation.type !== 'recurrence_rule') return;
     expect(mutation.rule.userId).toBe('signed-in-user');
     expect(mutation.task.userId).toBe('signed-in-user');
+  });
+
+  it('recognises only recurrence RLS conflicts as replaceable ownership mismatches', () => {
+    const recurrence = { type: 'recurrence_rule' } as never;
+    expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'new row violates row-level security policy for table "recurrence_rules"' }, recurrence)).toBe(true);
+    expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'blocked' }, recurrence)).toBe(false);
+    expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'new row violates row-level security policy for table "recurrence_rules"' }, { type: 'goal_plan' })).toBe(false);
   });
 });

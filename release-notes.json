@@ -3,14 +3,19 @@
     "version": "1.2.10",
     "date": "2026-08-23",
     "title": "The right account. The newest update.",
-    "summary": "Queued cloud changes now recover under the signed-in account, while desktop updates skip straight to the newest published release.",
+    "summary": "Account creation and cloud sync recover reliably, desktop updates skip to the newest release, and the private Command Centre now shows live users and service health.",
     "highlights": [
+      "Repairs email and Google account creation in Supabase",
+      "Preserves profile identity, referrals, and Founding 50 attribution during signup",
       "Repairs older recurrence changes blocked by row-level security",
       "Binds every queued write to the currently signed-in account",
       "Retries waiting changes without weakening database protection",
       "Prevents older missed releases from replacing newer update information",
       "Bypasses stale update metadata when checking GitHub",
-      "Shows the newest published version and its matching notes"
+      "Shows the newest published version and its matching notes",
+      "Treats a dismissed share sheet as a normal cancellation instead of an error",
+      "Shows privacy-minimal online and last-seen status in the owner-only user list",
+      "Adds private live health checks for Auth, database, AI, Stripe, and email"
     ]
   },
   {

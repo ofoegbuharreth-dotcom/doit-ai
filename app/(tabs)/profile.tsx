@@ -89,7 +89,11 @@ export default function ProfileScreen() {
   };
   const invite = async () => {
     if (!founding) return;
-    try { const result = await shareReferral(founding.referralCode); setShareMessage(result === 'copied' ? 'Invite link copied.' : 'Invite ready to share.'); } catch { setShareMessage('Sharing was cancelled.'); }
+    setShareMessage('');
+    try {
+      const result = await shareReferral(founding.referralCode);
+      setShareMessage(result === 'copied' ? 'Invite link copied.' : result === 'shared' ? 'Invite shared.' : '');
+    } catch { setShareMessage('Could not open sharing. The invite link is still available to copy.'); }
   };
   const toggleAnalytics = async () => {
     const next = !analyticsEnabled;

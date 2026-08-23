@@ -14,7 +14,7 @@ import {
   persistTaskStatus,
 } from '@/services/supabase/repository';
 import { supabase } from '@/services/supabase/client';
-import { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
+import { isRecurrenceOwnershipMismatch, isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 import { bindMutationToUser } from './workspace-ownership';
 
 export { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
@@ -37,6 +37,10 @@ type QueuedMutation = { id: string; userId: string; createdAt: string; mutation:
 
 const queueKey = (userId: string) => `doit:workspace-sync-queue:${userId}`;
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const makeUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+  const value = Math.floor(Math.random() * 16);
+  return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+});
 
 async function readQueue(userId: string): Promise<QueuedMutation[]> {
   try {
@@ -77,6 +81,24 @@ function assertResult(result: { error: unknown } | void) {
   if (result && result.error) throw result.error;
 }
 
+async function persistOwnedRecurrence(mutation: Extract<WorkspaceMutation, { type: 'recurrence_rule' }>) {
+  try {
+    assertResult(await persistRecurrenceRule(mutation.rule));
+    return assertResult(await persistTaskChanges(mutation.task));
+  } catch (error) {
+    if (!isRecurrenceOwnershipMismatch(error, mutation)) throw error;
+
+    // An old client may have queued a rule ID that already belongs to another
+    // account. It can never be updated through RLS. Preserve the user's intent
+    // by creating a fresh owned rule and pointing their task at that rule.
+    const replacementId = makeUuid();
+    const replacementRule = { ...mutation.rule, id: replacementId };
+    const replacementTask = { ...mutation.task, recurrenceRuleId: replacementId };
+    assertResult(await persistRecurrenceRule(replacementRule));
+    return assertResult(await persistTaskChanges(replacementTask));
+  }
+}
+
 export async function executeWorkspaceMutation(mutation: WorkspaceMutation, userId?: string) {
   if (userId) mutation = bindMutationToUser(mutation, userId);
   if (mutation.type === 'task_status') return assertResult(await persistTaskStatus(mutation.task, mutation.status));
@@ -84,7 +106,7 @@ export async function executeWorkspaceMutation(mutation: WorkspaceMutation, user
   if (mutation.type === 'goal_changes') return assertResult(await persistGoalChanges(mutation.goal));
   if (mutation.type === 'delete_goal') return assertResult(await deleteGoalRecord(mutation.goalId));
   if (mutation.type === 'new_task') return assertResult(await persistNewTask(mutation.task));
-  if (mutation.type === 'recurrence_rule') { assertResult(await persistRecurrenceRule(mutation.rule)); return assertResult(await persistTaskChanges(mutation.task)); }
+  if (mutation.type === 'recurrence_rule') return persistOwnedRecurrence(mutation);
   if (mutation.type === 'recurrence_remove') return assertResult(await deleteRecurrenceRule(mutation.ruleId));
   if (mutation.type === 'check_in') return assertResult(await persistCheckIn(mutation.checkIn));
   if (mutation.type === 'activity') return assertResult(await persistActivity(mutation.activity));

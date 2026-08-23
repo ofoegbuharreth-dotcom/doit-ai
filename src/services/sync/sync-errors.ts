@@ -9,3 +9,10 @@ export function isSafelyStaleQueuedMutation(error: unknown, mutation: { type: st
   if (code !== '23503') return false;
   return ['activity', 'task_status', 'task_changes', 'delete_goal', 'recurrence_remove'].includes(mutation.type);
 }
+
+export function isRecurrenceOwnershipMismatch(error: unknown, mutation: { type: string }) {
+  if (mutation.type !== 'recurrence_rule') return false;
+  const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+  const message = workspaceSyncErrorMessage(error, '');
+  return code === '42501' && /row-level security|recurrence_rules/i.test(message);
+}
