@@ -146,7 +146,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
         updatePendingChanges(count);
         await flushPendingChanges();
       } else {
-        await executeWorkspaceMutation(mutation);
+        await executeWorkspaceMutation(mutation, user.id);
         setLastSyncedAt(new Date().toISOString());
         setSyncState('synced');
       }
@@ -415,15 +415,16 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     const selected = tasks.find((task) => task.id === taskId);
     if (!selected) return { error: 'That action is no longer available.' };
     const now = new Date().toISOString();
-    const rule: RecurrenceRule = { id: selected.recurrenceRuleId ?? makeId(), userId: selected.userId, frequency, interval: 1, startsOn: selected.scheduledDate, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', createdAt: now, updatedAt: now };
-    const updated = { ...selected, recurrenceRuleId: rule.id };
+    const ownerId = user?.id ?? selected.userId;
+    const rule: RecurrenceRule = { id: selected.recurrenceRuleId ?? makeId(), userId: ownerId, frequency, interval: 1, startsOn: selected.scheduledDate, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', createdAt: now, updatedAt: now };
+    const updated = { ...selected, userId: ownerId, recurrenceRuleId: rule.id };
     setRecurrenceRules((current) => [rule, ...current.filter((item) => item.id !== rule.id)]);
     setTasks((current) => current.map((task) => task.id === taskId ? updated : task));
     const result = await commitMutation({ type: 'recurrence_rule', rule, task: updated });
     if (result.error) return { error: result.error };
     addActivity({ goalId: selected.goalId, type: 'plan_adjusted', title: `Made “${selected.title}” recurring`, detail: frequency === 'daily' ? 'Repeats every day' : frequency === 'weekdays' ? 'Repeats every weekday' : 'Repeats every week' });
     return {};
-  }, [addActivity, commitMutation, tasks]);
+  }, [addActivity, commitMutation, tasks, user?.id]);
 
   const clearTaskRecurrence = useCallback(async (taskId: string) => {
     const selected = tasks.find((task) => task.id === taskId); const ruleId = selected?.recurrenceRuleId;

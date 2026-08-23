@@ -71,6 +71,19 @@ function normaliseReleaseNotes(value) {
   return typeof value === 'string' ? value : undefined;
 }
 
+function compareVersions(left = '0', right = '0') {
+  const a = String(left).replace(/^v/i, '').split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const b = String(right).replace(/^v/i, '').split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if ((a[index] ?? 0) !== (b[index] ?? 0)) return (a[index] ?? 0) - (b[index] ?? 0);
+  }
+  return 0;
+}
+
+function shouldKeepKnownUpdate(candidateVersion) {
+  return Boolean(updateState.availableVersion) && compareVersions(updateState.availableVersion, candidateVersion) > 0;
+}
+
 async function checkForUpdates() {
   if (['downloading', 'downloaded'].includes(updateState.phase)) return updateState;
   if (!updateSupported()) {
@@ -95,11 +108,27 @@ function configureUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
+  autoUpdater.allowDowngrade = false;
+  // Avoid an intermediary/CDN response keeping a client on the first missed
+  // release when a newer GitHub release already exists.
+  autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' };
   autoUpdater.on('checking-for-update', () => publishUpdateState({ phase: 'checking', message: undefined }));
-  autoUpdater.on('update-available', (info) => publishUpdateState({ phase: 'available', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes), percent: 0, message: undefined }));
-  autoUpdater.on('update-not-available', () => publishUpdateState({ phase: 'up-to-date', availableVersion: undefined, percent: undefined, message: 'You have the newest version of DOIT AI.' }));
+  autoUpdater.on('update-available', (info) => {
+    if (shouldKeepKnownUpdate(info.version)) return;
+    publishUpdateState({ phase: 'available', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes), percent: 0, message: undefined });
+  });
+  autoUpdater.on('update-not-available', () => {
+    if (updateState.availableVersion && compareVersions(updateState.availableVersion, app.getVersion()) > 0) return;
+    publishUpdateState({ phase: 'up-to-date', availableVersion: undefined, percent: undefined, message: 'You have the newest published version of DOIT AI.' });
+  });
   autoUpdater.on('download-progress', (progress) => publishUpdateState({ phase: 'downloading', percent: Math.max(0, Math.min(100, Math.round(progress.percent))), message: undefined }));
-  autoUpdater.on('update-downloaded', (info) => publishUpdateState({ phase: 'downloaded', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes) ?? updateState.releaseNotes, percent: 100, message: 'The update is ready to install.' }));
+  autoUpdater.on('update-downloaded', (info) => {
+    if (shouldKeepKnownUpdate(info.version)) {
+      setTimeout(() => { void checkForUpdates(); }, 1_000);
+      return;
+    }
+    publishUpdateState({ phase: 'downloaded', availableVersion: info.version, releaseNotes: normaliseReleaseNotes(info.releaseNotes) ?? updateState.releaseNotes, percent: 100, message: 'The newest update is ready to install.' });
+  });
   autoUpdater.on('error', (error) => {
     captureDesktopError(error, 'auto_updater');
     publishUpdateState({ phase: 'error', message: 'The update could not be completed. Your current version is still safe to use.' });

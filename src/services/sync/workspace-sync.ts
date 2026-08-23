@@ -15,6 +15,7 @@ import {
 } from '@/services/supabase/repository';
 import { supabase } from '@/services/supabase/client';
 import { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
+import { bindMutationToUser } from './workspace-ownership';
 
 export { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 
@@ -53,13 +54,14 @@ async function writeQueue(userId: string, queue: QueuedMutation[]) {
 
 export async function queueWorkspaceMutation(userId: string, mutation: WorkspaceMutation) {
   const queue = await readQueue(userId);
-  const dedupeKey = mutation.type === 'task_status' || mutation.type === 'task_changes' ? `task:${mutation.task.id}`
-    : mutation.type === 'goal_changes' ? `goal:${mutation.goal.id}`
-      : mutation.type === 'check_in' ? `checkin:${mutation.checkIn.date}` : undefined;
+  const ownedMutation = bindMutationToUser(mutation, userId);
+  const dedupeKey = ownedMutation.type === 'task_status' || ownedMutation.type === 'task_changes' ? `task:${ownedMutation.task.id}`
+    : ownedMutation.type === 'goal_changes' ? `goal:${ownedMutation.goal.id}`
+      : ownedMutation.type === 'check_in' ? `checkin:${ownedMutation.checkIn.date}` : undefined;
   const next = dedupeKey
     ? queue.filter((item) => mutationKey(item.mutation) !== dedupeKey)
     : queue;
-  next.push({ id: makeId(), userId, createdAt: new Date().toISOString(), mutation });
+  next.push({ id: makeId(), userId, createdAt: new Date().toISOString(), mutation: ownedMutation });
   await writeQueue(userId, next);
   return next.length;
 }
@@ -75,7 +77,8 @@ function assertResult(result: { error: unknown } | void) {
   if (result && result.error) throw result.error;
 }
 
-export async function executeWorkspaceMutation(mutation: WorkspaceMutation) {
+export async function executeWorkspaceMutation(mutation: WorkspaceMutation, userId?: string) {
+  if (userId) mutation = bindMutationToUser(mutation, userId);
   if (mutation.type === 'task_status') return assertResult(await persistTaskStatus(mutation.task, mutation.status));
   if (mutation.type === 'task_changes') return assertResult(await persistTaskChanges(mutation.task));
   if (mutation.type === 'goal_changes') return assertResult(await persistGoalChanges(mutation.goal));
@@ -95,7 +98,7 @@ export async function flushWorkspaceQueue(userId: string) {
   let discarded = 0;
   for (const item of queue) {
     try {
-      await executeWorkspaceMutation(item.mutation);
+      await executeWorkspaceMutation(item.mutation, userId);
       completed += 1;
     } catch (error) {
       if (!isSafelyStaleQueuedMutation(error, item.mutation)) throw error;

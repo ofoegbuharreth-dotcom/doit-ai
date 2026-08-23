@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.2.10",
+    "date": "2026-08-23",
+    "title": "The right account. The newest update.",
+    "summary": "Queued cloud changes now recover under the signed-in account, while desktop updates skip straight to the newest published release.",
+    "highlights": [
+      "Repairs older recurrence changes blocked by row-level security",
+      "Binds every queued write to the currently signed-in account",
+      "Retries waiting changes without weakening database protection",
+      "Prevents older missed releases from replacing newer update information",
+      "Bypasses stale update metadata when checking GitHub",
+      "Shows the newest published version and its matching notes"
+    ]
+  },
+  {
     "version": "1.2.9",
     "date": "2026-08-23",
     "title": "Save once. Stay in sync.",
