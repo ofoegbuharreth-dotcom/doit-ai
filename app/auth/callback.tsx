@@ -6,12 +6,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Screen, Text } from '@/components/ui';
 import { completeEmailVerification, getFirstRunActivation } from '@/services';
+import { track } from '@/services/observability';
 import { colors, radius, spacing } from '@/theme';
 
 type VerificationState = 'working' | 'success' | 'error';
 
 export default function AuthCallbackScreen() {
   const url = Linking.useLinkingURL();
+  const google = Boolean(url?.includes('provider=google'));
   const [state, setState] = useState<VerificationState>('working');
   const [error, setError] = useState('');
 
@@ -29,6 +31,7 @@ export default function AuthCallbackScreen() {
         setError(result.error);
         setState('error');
       } else {
+        if (google) track('account signed in', { provider: 'google' });
         setState('success');
       }
     }).catch(() => {
@@ -37,7 +40,7 @@ export default function AuthCallbackScreen() {
       setState('error');
     });
     return () => { active = false; };
-  }, [url]);
+  }, [google, url]);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -49,10 +52,10 @@ export default function AuthCallbackScreen() {
         />
       </View>
       <View style={styles.copy}>
-        <Text variant="eyebrow" color={state === 'error' ? 'danger' : 'accent'}>EMAIL VERIFICATION</Text>
-        <Text variant="title">{state === 'working' ? 'Verifying your email…' : state === 'success' ? 'You’re verified.' : 'That link didn’t work.'}</Text>
+        <Text variant="eyebrow" color={state === 'error' ? 'danger' : 'accent'}>{google ? 'GOOGLE SIGN-IN' : 'EMAIL VERIFICATION'}</Text>
+        <Text variant="title">{state === 'working' ? google ? 'Signing you in…' : 'Verifying your email…' : state === 'success' ? google ? 'Welcome to DOIT.' : 'You’re verified.' : 'That link didn’t work.'}</Text>
         <Text color="secondary">
-          {state === 'working' ? 'Just a moment while we secure your account.' : state === 'success' ? 'Your account is ready. You can start building your goals.' : error}
+          {state === 'working' ? 'Just a moment while we secure your account.' : state === 'success' ? google ? 'Google sign-in is complete. Continue to your plan.' : 'Your account is ready. You can start building your goals.' : error}
         </Text>
       </View>
       {state === 'success' ? <Button label="Continue my setup" onPress={continueAfterVerification} /> : null}

@@ -5,7 +5,7 @@ import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useDesktopUpdate } from '@/hooks';
-import { parseDesktopReleaseNotes } from '@/services/release-notes';
+import { compactReleaseSummary, parseDesktopReleaseNotes } from '@/services/release-notes';
 import { colors, radius, spacing } from '@/theme';
 import { Text } from '@/components/ui';
 
@@ -32,6 +32,7 @@ export function DesktopReliability() {
   const downloading = state.phase === 'downloading';
   const downloaded = state.phase === 'downloaded';
   const notes = parseDesktopReleaseNotes(state.releaseNotes);
+  const summary = compactReleaseSummary(notes.summary);
 
   return <>
     {!online ? <View accessibilityRole="alert" style={styles.offline}>
@@ -46,7 +47,8 @@ export function DesktopReliability() {
             <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-up'} color={colors.onAccent} size={23} /></View>
             <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready when you are.' : `Version ${state.availableVersion ?? ''} is ready.`}</Text></View>
           </View>
-          <Text color="secondary">{downloaded ? 'Restart DOIT to finish installing the update. Your current work is already saved.' : notes.summary}</Text>
+          {downloaded ? <Text color="secondary">Restart DOIT to finish installing the update. Your current work is already saved.</Text> : null}
+          <View style={styles.summary}><Text variant="eyebrow" color="accent">WHY UPDATE</Text><Text color="secondary">{summary}</Text></View>
           {notes.highlights.length ? <View style={styles.notes}><Text variant="eyebrow" color="accent">WHAT THIS UPDATE INCLUDES</Text>{notes.highlights.map((highlight) => <View key={highlight} style={styles.note}><View style={styles.noteIcon}><Ionicons name="checkmark" color={colors.accent} size={13} /></View><Text variant="caption" style={styles.flex}>{highlight}</Text></View>)}</View> : null}
           {downloading ? <View style={styles.progressBlock}>
             <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${state.percent ?? 0}%` }]} /></View>
@@ -75,6 +77,7 @@ const styles = StyleSheet.create({
   progressBlock: { gap: spacing.xs },
   progressTrack: { backgroundColor: colors.border, borderRadius: radius.pill, height: 8, overflow: 'hidden' },
   progressFill: { backgroundColor: colors.accent, borderRadius: radius.pill, height: '100%' },
+  summary: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, borderRadius: radius.md, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
   notes: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md }, note: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, noteIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.pill, height: 23, justifyContent: 'center', width: 23 },
   primary: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', minHeight: 54, paddingHorizontal: spacing.lg },
   primaryText: { color: colors.onAccent },

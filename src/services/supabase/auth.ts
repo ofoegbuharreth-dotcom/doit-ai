@@ -2,6 +2,7 @@ import type { EmailOtpType } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import { supabase } from './client';
+export { isAuthCallbackUrl, isPasswordRecoveryUrl } from './auth-url';
 
 // Keep auth emails independent from Metro's changing LAN URL. This route is
 // registered by the `doit` scheme in app.json and handled by Expo Router.
@@ -22,11 +23,6 @@ export const passwordRecoveryRedirectUrl = isInstalledDesktop
   : Platform.OS === 'web' && typeof window !== 'undefined'
     ? `${window.location.origin}/auth/reset-password`
     : 'doit://auth/reset-password';
-
-export function isPasswordRecoveryUrl(url: string | null | undefined) {
-  if (!url) return false;
-  return url.includes('/auth/reset-password') || /(?:[?#&])type=recovery(?:[&#]|$)/.test(url);
-}
 
 export async function resendSignupVerification(email: string) {
   return supabase.auth.resend({

@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.2.5",
+    "date": "2026-08-23",
+    "title": "A faster way into DOIT",
+    "summary": "Sign in with Google across web and desktop, with clearer update summaries that explain why each release is worth installing.",
+    "highlights": [
+      "Google sign-in and signup across web and desktop",
+      "Secure browser-to-desktop authentication return",
+      "Short, customisable reasons inside every update popup"
+    ]
+  },
+  {
     "version": "1.2.4",
     "date": "2026-08-22",
     "title": "Plans worth sharing",

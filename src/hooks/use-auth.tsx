@@ -3,17 +3,18 @@ import * as Linking from 'expo-linking';
 import type { User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
-import { authRememberKey, emailVerificationRedirectUrl, isPasswordRecoveryUrl, isSupabaseConfigured, passwordRecoveryRedirectUrl, resendSignupVerification, stripeReturnSessionKey, supabase } from '@/services';
+import { authRememberKey, emailVerificationRedirectUrl, isAuthCallbackUrl, isPasswordRecoveryUrl, isSupabaseConfigured, passwordRecoveryRedirectUrl, resendSignupVerification, stripeReturnSessionKey, supabase } from '@/services';
 import { clearPendingReferralCode, getPendingReferralCode } from '@/services/growth';
 import { track } from '@/services/observability';
 
-type AuthResult = { error?: string; requiresEmailVerification?: boolean };
+type AuthResult = { error?: string; requiresEmailVerification?: boolean; oauthOpened?: boolean };
 interface AuthContextValue {
   user: User | { id: string; email: string } | null;
   loading: boolean;
   demoMode: boolean;
   signIn: (email: string, password: string, rememberMe: boolean) => Promise<AuthResult>;
   signUp: (email: string, password: string, name: string, rememberMe: boolean) => Promise<AuthResult>;
+  signInWithGoogle: (rememberMe: boolean) => Promise<AuthResult>;
   resendVerification: (email: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
@@ -48,7 +49,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
             window.sessionStorage.removeItem(stripeReturnSessionKey);
           } catch { /* Treat unavailable session storage as a normal fresh load. */ }
         }
-        if (!rememberMe && !isPasswordRecoveryUrl(initialUrl) && !returningFromStripe && !desktopExternalReturn) {
+        if (!rememberMe && !isPasswordRecoveryUrl(initialUrl) && !isAuthCallbackUrl(initialUrl) && !returningFromStripe && !desktopExternalReturn) {
           await supabase.auth.signOut({ scope: 'local' });
           if (active) setUser(null);
         } else {
@@ -116,6 +117,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { error: error?.message, requiresEmailVerification: Boolean(data.user && !data.session) };
   }, []);
 
+  const signInWithGoogle = useCallback(async (rememberMe: boolean) => {
+    if (!isSupabaseConfigured) return { error: 'Google sign-in requires the connected DOIT authentication service.' };
+    await saveRememberPreference(rememberMe);
+    const installedDesktop = typeof window !== 'undefined' && Boolean(window.doitDesktop?.isDesktop);
+    const redirectTo = installedDesktop
+      ? 'doit://auth/callback?provider=google'
+      : typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback?provider=google`
+        : 'doit://auth/callback?provider=google';
+    const manualBrowser = installedDesktop || typeof window === 'undefined';
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: manualBrowser } });
+    if (error) return { error: error.message };
+    if (manualBrowser && data.url) {
+      try {
+        if (installedDesktop) await window.doitDesktop!.openExternal(data.url);
+        else await Linking.openURL(data.url);
+        return { oauthOpened: true };
+      } catch { return { error: 'DOIT could not open Google sign-in. Please try again.' }; }
+    }
+    return { oauthOpened: true };
+  }, []);
+
   const resendVerification = useCallback(async (email: string) => {
     if (!email.trim()) return { error: 'Enter your email first.' };
     if (!isSupabaseConfigured) return {};
@@ -159,7 +182,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return {};
   }, []);
 
-  const value = useMemo(() => ({ user, loading, demoMode: !isSupabaseConfigured, signIn, signUp, resendVerification, resetPassword, updatePassword, signOut, deleteAccount }), [deleteAccount, loading, resendVerification, resetPassword, signIn, signOut, signUp, updatePassword, user]);
+  const value = useMemo(() => ({ user, loading, demoMode: !isSupabaseConfigured, signIn, signUp, signInWithGoogle, resendVerification, resetPassword, updatePassword, signOut, deleteAccount }), [deleteAccount, loading, resendVerification, resetPassword, signIn, signInWithGoogle, signOut, signUp, updatePassword, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
