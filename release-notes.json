@@ -1,9 +1,23 @@
 [
   {
+    "version": "1.2.11",
+    "date": "2026-08-23",
+    "title": "Know what’s live. Know what’s healthy.",
+    "summary": "Sharing feels natural, user presence works across devices, and the private Command Centre now shows the health of the services powering DOIT.",
+    "highlights": [
+      "Treats a dismissed share sheet as a normal cancellation instead of an error",
+      "Shows online and last-seen status in the owner-only user list",
+      "Recognises web, installed web app, desktop, and mobile activity",
+      "Keeps presence accurate when the same account is open on multiple devices",
+      "Adds private live health checks for Auth, database, AI, Stripe, and email",
+      "Protects presence and health data with server-side owner verification"
+    ]
+  },
+  {
     "version": "1.2.10",
     "date": "2026-08-23",
     "title": "The right account. The newest update.",
-    "summary": "Account creation and cloud sync recover reliably, desktop updates skip to the newest release, and the private Command Centre now shows live users and service health.",
+    "summary": "Account creation works reliably again, queued cloud changes recover under the signed-in account, and desktop updates skip to the newest release.",
     "highlights": [
       "Repairs email and Google account creation in Supabase",
       "Preserves profile identity, referrals, and Founding 50 attribution during signup",
@@ -12,10 +26,7 @@
       "Retries waiting changes without weakening database protection",
       "Prevents older missed releases from replacing newer update information",
       "Bypasses stale update metadata when checking GitHub",
-      "Shows the newest published version and its matching notes",
-      "Treats a dismissed share sheet as a normal cancellation instead of an error",
-      "Shows privacy-minimal online and last-seen status in the owner-only user list",
-      "Adds private live health checks for Auth, database, AI, Stripe, and email"
+      "Shows the newest published version and its matching notes"
     ]
   },
   {
