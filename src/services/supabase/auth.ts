@@ -2,7 +2,7 @@ import type { EmailOtpType } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import { supabase } from './client';
-export { isAuthCallbackUrl, isPasswordRecoveryUrl } from './auth-url';
+export { desktopAuthDeepLink, isAuthCallbackUrl, isPasswordRecoveryUrl } from './auth-url';
 
 // Keep auth emails independent from Metro's changing LAN URL. This route is
 // registered by the `doit` scheme in app.json and handled by Expo Router.

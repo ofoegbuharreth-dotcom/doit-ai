@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.2.8",
+    "date": "2026-08-23",
+    "title": "A profile that feels like yours",
+    "summary": "Personalise your DOIT identity and move from Google sign-in back into the desktop app without losing your flow.",
+    "highlights": [
+      "Edit your name, profile picture, and gender preference",
+      "Private profile-photo storage that stays synced across devices",
+      "Official full-colour Google branding on login and signup",
+      "Reliable browser-to-desktop return after Google sign-in"
+    ]
+  },
+  {
     "version": "1.2.7",
     "date": "2026-08-23",
     "title": "Routines that recover with you",

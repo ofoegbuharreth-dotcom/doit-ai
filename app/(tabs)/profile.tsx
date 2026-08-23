@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router as expoRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Input, Screen, Text } from '@/components/ui';
 import { useAuth, useDesktopUpdate, useDeviceSessions, useSubscription } from '@/hooks';
-import { exportMaxCalendar, exportMaxPortfolioCsv, exportProgressCsv, exportWorkspaceBackup, getFoundingStatus, getMyFoundingProfile, isOwnerEmail, shareReferral, type FoundingProfile, type FoundingStatus } from '@/services';
+import { exportMaxCalendar, exportMaxPortfolioCsv, exportProgressCsv, exportWorkspaceBackup, getFoundingStatus, getMyFoundingProfile, getMyProfile, isOwnerEmail, saveMyProfile, shareReferral, uploadMyAvatar, type DoitProfile, type FoundingProfile, type FoundingStatus, type ProfileGender } from '@/services';
 import { getTelemetryEnabled, setTelemetryEnabled } from '@/services/observability';
 import { useAppStore } from '@/stores';
 import { accentPalettes, colors, radius, spacing, useAccentTheme, type AccentId, type ColorMode } from '@/theme';
@@ -28,6 +29,14 @@ export default function ProfileScreen() {
   const [exporting, setExporting] = useState(false); const [exportMessage, setExportMessage] = useState('');
   const [founding, setFounding] = useState<FoundingProfile>(); const [foundingStatus, setFoundingStatus] = useState<FoundingStatus>(); const [shareMessage, setShareMessage] = useState('');
   const [desktopInfo, setDesktopInfo] = useState<{ appVersion: string; electronVersion: string; platform: string; packaged: boolean }>();
+  const [profile, setProfile] = useState<DoitProfile>();
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileGender, setProfileGender] = useState<ProfileGender>('prefer_not_to_say');
+  const [profileAvatar, setProfileAvatar] = useState<string>();
+  const [profileAvatarPath, setProfileAvatarPath] = useState<string>();
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const canDelete = deleteConfirmation === 'Delete';
   const isOwner = isOwnerEmail(user?.email);
 
@@ -40,6 +49,44 @@ export default function ProfileScreen() {
     if (!user || demoMode) return;
     Promise.all([getMyFoundingProfile(), getFoundingStatus()]).then(([profile, campaign]) => { setFounding(profile); setFoundingStatus(campaign); }).catch(() => undefined);
   }, [demoMode, user]);
+  useEffect(() => {
+    if (!user || demoMode || !('user_metadata' in user)) return;
+    getMyProfile(user).then(setProfile).catch(() => undefined);
+  }, [demoMode, user]);
+  const openProfileEditor = () => {
+    const fallbackName = user && 'user_metadata' in user ? String(user.user_metadata?.name ?? '') : '';
+    setProfileName(profile?.displayName ?? fallbackName);
+    setProfileGender(profile?.gender ?? 'prefer_not_to_say');
+    setProfileAvatar(profile?.avatarUrl);
+    setProfileAvatarPath(profile?.avatarPath);
+    setProfileError('');
+    setProfileModalVisible(true);
+  };
+  const chooseProfilePicture = async () => {
+    if (!user || !('user_metadata' in user)) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { setProfileError('Allow photo access to choose a profile picture.'); return; }
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.82 });
+    if (picked.canceled) return;
+    setProfileSaving(true); setProfileError('');
+    try {
+    const asset = picked.assets[0];
+    if (!asset) { setProfileError('No image was selected.'); setProfileSaving(false); return; }
+      const uploaded = await uploadMyAvatar(user.id, asset.uri, asset.mimeType);
+      setProfileAvatar(uploaded.url); setProfileAvatarPath(uploaded.path);
+    } catch (value) { setProfileError(value instanceof Error ? value.message : 'Could not upload that image.'); }
+    finally { setProfileSaving(false); }
+  };
+  const saveProfile = async () => {
+    if (!user || !('user_metadata' in user) || profileSaving) return;
+    setProfileSaving(true); setProfileError('');
+    try {
+      await saveMyProfile(user, { displayName: profileName, avatarUrl: profileAvatar, avatarPath: profileAvatarPath, gender: profileGender });
+      const next = { id: user.id, displayName: profileName.trim(), avatarUrl: profileAvatar, avatarPath: profileAvatarPath, gender: profileGender };
+      setProfile(next); setProfileModalVisible(false);
+    } catch (value) { setProfileError(value instanceof Error ? value.message : 'Could not save your profile.'); }
+    finally { setProfileSaving(false); }
+  };
   const invite = async () => {
     if (!founding) return;
     try { const result = await shareReferral(founding.referralCode); setShareMessage(result === 'copied' ? 'Invite link copied.' : 'Invite ready to share.'); } catch { setShareMessage('Sharing was cancelled.'); }
@@ -71,8 +118,9 @@ export default function ProfileScreen() {
   return <>
     <Screen scrollable contentContainerStyle={styles.screen}>
       <View style={styles.header}>
-        <View style={styles.avatar}><Text variant="heading">{user?.email?.[0]?.toUpperCase() ?? 'D'}</Text></View>
-        <View style={styles.flex}><Text variant="title">Your profile</Text><Text color="secondary">{user?.email ?? (demoMode ? 'Demo executor' : 'Signed out')}</Text></View>
+        <View style={styles.avatar}>{profile?.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} /> : <Text variant="heading">{profile?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? 'D'}</Text>}</View>
+        <View style={styles.flex}><Text variant="title">{profile?.displayName || 'Your profile'}</Text><Text color="secondary">{user?.email ?? (demoMode ? 'Demo executor' : 'Signed out')}</Text></View>
+        {!demoMode ? <Pressable accessibilityRole="button" onPress={openProfileEditor} style={styles.editProfile}><Ionicons name="create-outline" color={colors.accent} size={18} /><Text variant="label" color="accent">Edit</Text></Pressable> : null}
       </View>
       {demoMode ? <Card style={styles.demo}><Text variant="eyebrow" color="accent">DEMO MODE</Text><Text color="secondary">Add Supabase environment values to enable live accounts and cloud data.</Text></Card> : null}
       {isOwner ? <Pressable onPress={() => router.push('/owner')}><LinearGradient colors={[palette.muted, colors.surfaceElevated]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.owner}><View style={styles.ownerIcon}><Ionicons name="pulse" color={colors.onAccent} size={22} /></View><View style={styles.flex}><Text variant="eyebrow" color="accent">OWNER ONLY</Text><Text variant="heading">DOIT command centre</Text><Text variant="caption" color="secondary">Growth, activation, retention, subscriptions, referrals, and feedback.</Text></View><Ionicons name="chevron-forward" color={colors.accent} size={20} /></LinearGradient></Pressable> : null}
@@ -179,6 +227,30 @@ export default function ProfileScreen() {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    <Modal visible={profileModalVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !profileSaving && setProfileModalVisible(false)}>
+      <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable accessibilityLabel="Close profile editor" style={StyleSheet.absoluteFill} onPress={() => !profileSaving && setProfileModalVisible(false)} />
+        <View accessibilityViewIsModal style={styles.profileDialog}>
+          <View style={styles.profileDialogTop}><View><Text variant="eyebrow" color="accent">YOUR IDENTITY</Text><Text variant="title">Edit profile</Text></View><Pressable hitSlop={12} onPress={() => !profileSaving && setProfileModalVisible(false)}><Ionicons name="close" color={colors.textSecondary} size={24} /></Pressable></View>
+          <View style={styles.avatarEditor}>
+            <View style={styles.avatarLarge}>{profileAvatar ? <Image source={{ uri: profileAvatar }} style={styles.avatarImage} /> : <Text variant="title">{profileName.trim()?.[0]?.toUpperCase() || 'D'}</Text>}</View>
+            <View style={styles.flex}><Text variant="label">Profile picture</Text><Text variant="caption" color="muted">Square photos work best. Maximum 5 MB.</Text><Pressable disabled={profileSaving} onPress={chooseProfilePicture} style={styles.photoButton}><Ionicons name="image-outline" color={colors.accent} size={17} /><Text variant="caption" color="accent">Choose photo</Text></Pressable></View>
+          </View>
+          <Input label="Name" value={profileName} onChangeText={setProfileName} placeholder="Your name" autoCapitalize="words" autoComplete="name" />
+          <View style={styles.genderField}><Text variant="label">Gender</Text><Text variant="caption" color="muted">Used only to personalise your DOIT experience.</Text>
+            <View accessibilityRole="radiogroup" style={styles.genderOptions}>
+              {([['male', 'Male'], ['woman', 'Woman'], ['prefer_not_to_say', 'Prefer not to say']] as [ProfileGender, string][]).map(([value, label]) => {
+                const selected = profileGender === value;
+                return <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: selected }} onPress={() => setProfileGender(value)} style={[styles.genderOption, selected && styles.genderOptionSelected]}><View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <View style={styles.radioDot} /> : null}</View><Text variant="caption" color={selected ? 'accent' : 'secondary'}>{label}</Text></Pressable>;
+              })}
+            </View>
+          </View>
+          {profileError ? <Text variant="caption" color="danger">{profileError}</Text> : null}
+          <Button label={profileSaving ? 'Saving…' : 'Save profile'} disabled={profileSaving} icon="checkmark" onPress={saveProfile} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   </>;
 }
 
@@ -190,7 +262,8 @@ function Setting({ icon, title, detail, onPress, complete }: { icon: keyof typeo
 const styles = StyleSheet.create({
   screen: { gap: spacing.xl, paddingBottom: spacing.xxl, paddingTop: spacing.lg },
   header: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
-  avatar: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accent, borderRadius: radius.pill, borderWidth: 1, height: 58, justifyContent: 'center', width: 58 },
+  avatar: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accent, borderRadius: radius.pill, borderWidth: 1, height: 58, justifyContent: 'center', overflow: 'hidden', width: 58 },
+  avatarImage: { height: '100%', width: '100%' }, editProfile: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', gap: spacing.xs, minHeight: 42, paddingHorizontal: spacing.md },
   flex: { flex: 1 }, demo: { gap: spacing.xs }, owner: { alignItems: 'center', borderColor: colors.accentBorder, borderRadius: radius.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.lg }, ownerIcon: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, height: 46, justifyContent: 'center', width: 46 }, founding: { borderColor: colors.accentBorder, borderRadius: radius.lg, borderWidth: 1, gap: spacing.md, overflow: 'hidden', padding: spacing.lg }, foundingTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, foundingMark: { alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, foundingBadge: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }, foundingStats: { flexDirection: 'row', gap: spacing.sm }, foundingStat: { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flex: 1, gap: spacing.xxs, padding: spacing.md },
   pro: { borderColor: colors.accentMuted, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   proTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
@@ -209,4 +282,6 @@ const styles = StyleSheet.create({
   confirmDeleteReady: { backgroundColor: colors.danger, borderColor: colors.danger, opacity: 1 },
   confirmDeleteText: { color: colors.textMuted }, confirmDeleteTextReady: { color: '#FFFFFF' },
   cancelDelete: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  profileDialog: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.xl, borderWidth: 1, gap: spacing.lg, maxWidth: 520, padding: spacing.lg, width: '100%' },
+  profileDialogTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, avatarEditor: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.md }, avatarLarge: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accent, borderRadius: radius.pill, borderWidth: 1, height: 76, justifyContent: 'center', overflow: 'hidden', width: 76 }, photoButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.xs, minHeight: 36 }, genderField: { gap: spacing.xs }, genderOptions: { gap: spacing.xs }, genderOption: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 48, paddingHorizontal: spacing.md }, genderOptionSelected: { backgroundColor: colors.accentMuted, borderColor: colors.accent }, radio: { alignItems: 'center', borderColor: colors.textMuted, borderRadius: radius.pill, borderWidth: 1, height: 18, justifyContent: 'center', width: 18 }, radioSelected: { borderColor: colors.accent }, radioDot: { backgroundColor: colors.accent, borderRadius: radius.pill, height: 10, width: 10 },
 });

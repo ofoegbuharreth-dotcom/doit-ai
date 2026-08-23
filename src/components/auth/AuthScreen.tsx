@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks';
 import { track } from '@/services/observability';
 import { getFirstRunActivation, getPendingReferralCode } from '@/services';
 import { colors, radius, spacing } from '@/theme';
+import { GoogleLogo } from './GoogleLogo';
 
 export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
   const { signIn, signUp, signInWithGoogle, demoMode } = useAuth();
@@ -63,7 +64,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
         <Animated.View entering={FadeInDown.delay(80).duration(360)} style={styles.form}>
           {mode === 'signup' && invited ? <View style={styles.invite}><Ionicons name="rocket" color={colors.accent} size={19} /><View style={styles.inviteCopy}><Text variant="label" color="accent">Founding 50 invite detected</Text><Text variant="caption" color="muted">Your account will be linked to the member who invited you.</Text></View></View> : null}
           <PressableScale accessibilityRole="button" disabled={googleLoading || loading} haptic="selection" onPress={continueWithGoogle} style={[styles.google, (googleLoading || loading) && styles.disabled]}>
-            <View style={styles.googleIcon}><Ionicons name="logo-google" color={colors.textPrimary} size={21} /></View>
+            <View style={styles.googleIcon}><GoogleLogo size={22} /></View>
             <Text variant="label" style={styles.googleText}>{googleLoading ? 'Opening Google…' : mode === 'login' ? 'Log in with Google' : 'Sign up with Google'}</Text>
             <Ionicons name="arrow-forward" color={colors.textMuted} size={18} />
           </PressableScale>
@@ -99,7 +100,7 @@ const styles = StyleSheet.create({
   heading: { gap: spacing.sm },
   form: { gap: spacing.md },
   google: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 58, paddingHorizontal: spacing.sm },
-  googleIcon: { alignItems: 'center', backgroundColor: colors.surfacePressed, borderRadius: radius.sm, height: 38, justifyContent: 'center', width: 38 },
+  googleIcon: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#DADCE0', borderRadius: radius.sm, borderWidth: 1, height: 38, justifyContent: 'center', width: 38 },
   googleText: { flex: 1, textAlign: 'center' },
   googleNotice: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, padding: spacing.sm },
   divider: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, marginVertical: spacing.xs },

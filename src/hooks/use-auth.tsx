@@ -122,7 +122,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await saveRememberPreference(rememberMe);
     const installedDesktop = typeof window !== 'undefined' && Boolean(window.doitDesktop?.isDesktop);
     const redirectTo = installedDesktop
-      ? 'doit://auth/callback?provider=google'
+      ? 'https://doit-ai.pages.dev/auth/callback?provider=google&desktop=1'
       : typeof window !== 'undefined'
         ? `${window.location.origin}/auth/callback?provider=google`
         : 'doit://auth/callback?provider=google';
