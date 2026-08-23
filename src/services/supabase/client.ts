@@ -28,6 +28,12 @@ export const supabase = createClient(url ?? 'https://example.supabase.co', anonK
     storageKey: authStorageKey,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS === 'web',
+    // DOIT owns every callback exchange in its callback routes. Automatic URL
+    // detection races that explicit exchange in Electron and can consume the
+    // one-time OAuth code twice, making a valid Google return look expired.
+    detectSessionInUrl: false,
+    // PKCE keeps the verifier in the app that started Google sign-in while the
+    // browser only carries the short-lived code back through the `doit` scheme.
+    flowType: 'pkce',
   },
 });

@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.2.12",
+    "date": "2026-08-23",
+    "title": "Google sign-in lands where it should.",
+    "summary": "Desktop Google sign-in now returns securely from the browser and completes inside DOIT without showing a false expired-link error.",
+    "highlights": [
+      "Returns Google sign-in from the browser directly to the desktop app",
+      "Uses a secure PKCE exchange owned by the device that started sign-in",
+      "Prevents one-time OAuth callback codes from being consumed twice",
+      "Handles repeated desktop callback launches without losing the completed session"
+    ]
+  },
+  {
     "version": "1.2.11",
     "date": "2026-08-23",
     "title": "Know what’s live. Know what’s healthy.",

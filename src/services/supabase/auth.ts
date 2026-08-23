@@ -4,6 +4,19 @@ import { Platform } from 'react-native';
 import { supabase } from './client';
 export { desktopAuthDeepLink, isAuthCallbackUrl, isPasswordRecoveryUrl } from './auth-url';
 
+const authCodeExchanges = new Map<string, ReturnType<typeof supabase.auth.exchangeCodeForSession>>();
+
+function exchangeAuthCodeOnce(code: string) {
+  const existing = authCodeExchanges.get(code);
+  if (existing) return existing;
+  const exchange = supabase.auth.exchangeCodeForSession(code);
+  authCodeExchanges.set(code, exchange);
+  // Keep the result briefly so duplicate protocol launches and React effect
+  // replays receive the original result instead of consuming the code again.
+  setTimeout(() => authCodeExchanges.delete(code), 2 * 60 * 1000);
+  return exchange;
+}
+
 // Keep auth emails independent from Metro's changing LAN URL. This route is
 // registered by the `doit` scheme in app.json and handled by Expo Router.
 const isInstalledDesktop = Platform.OS === 'web'
@@ -43,7 +56,7 @@ export async function completeEmailVerification(url: string) {
 
   const code = get('code');
   if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await exchangeAuthCodeOnce(code);
     if (error) {
       const { data: existing } = await supabase.auth.getSession();
       if (existing.session) return { session: existing.session };
@@ -82,7 +95,7 @@ export async function completePasswordRecovery(url: string) {
 
   const code = get('code');
   if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await exchangeAuthCodeOnce(code);
     return { session: data.session, error: error?.message };
   }
 
