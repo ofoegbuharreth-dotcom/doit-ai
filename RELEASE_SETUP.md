@@ -6,7 +6,7 @@ The app code is release-ready, but the services below still need real project cr
 
 1. Create DOIT AI in Google Play Console with package `com.doitai.app`.
 2. Upload a signed production `.aab` to an internal testing track. Google Play products are not reliably testable from a locally installed debug build.
-3. Under **Monetize > Products > Subscriptions**, create DOIT Pro and DOIT MAX subscriptions, with monthly/annual base plans and any 7-day trial offer. Activate every base plan and offer.
+3. Under **Monetize > Products > Subscriptions**, create DOIT Pro and DOIT MAX subscriptions, with monthly/annual base plans and a 3-day trial offer for eligible new subscribers. Activate every base plan and offer. Remove or deactivate any older 7-day offer so Google Play cannot continue presenting it.
 4. Create the `doit_pro` entitlement and a current offering in RevenueCat. Attach the Google Play monthly and annual products to packages in that offering.
 5. Add the RevenueCat **public Android SDK key** to the production build environment as `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`. Set `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID=doit_pro`.
 6. Add tester Gmail accounts to the Play internal test and license-test lists, then install DOIT AI using the Play opt-in link.

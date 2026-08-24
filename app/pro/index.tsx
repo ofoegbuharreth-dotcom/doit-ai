@@ -6,6 +6,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { Button, Card, Screen, Text } from '@/components/ui';
+import { SUBSCRIPTION_TRIAL_DAYS } from '@/constants/subscription';
 import { useSubscription } from '@/hooks';
 import { track } from '@/services/observability';
 import { colors, radius, spacing, useAccentTheme } from '@/theme';
@@ -91,7 +92,7 @@ export default function ProScreen() {
 
     {isMax ? <View style={styles.actions}><Button label="Open Weekly Review" icon="analytics" onPress={() => router.push('/pro/weekly-review')} />{willRenew === false ? <Cancelled periodEnd={currentPeriodEndsAt} planName={planName} /> : <Button label="Manage DOIT MAX" variant="secondary" onPress={() => router.push('/pro/manage')} />}</View> :
       isPro && tier === 'pro' ? <View style={styles.actions}><Button label="Open Weekly Review" icon="analytics" onPress={() => router.push('/pro/weekly-review')} />{willRenew === false ? <Cancelled periodEnd={currentPeriodEndsAt} planName={planName} /> : <Button label="Manage DOIT Pro" variant="secondary" onPress={() => router.push('/pro/manage')} />}</View> :
-      <Card style={styles.cta}><View style={styles.ctaCopy}><Text variant="eyebrow" color="accent">{isPro ? 'UPGRADE YOUR SYSTEM' : 'START BUILDING'}</Text><Text variant="heading">{isPro ? 'Move from Pro to DOIT MAX' : `Start with ${tierCopy[tier].name}`}</Text><Text variant="caption" color="secondary">{isPro ? 'Stripe will show the exact prorated amount before you confirm.' : 'Eligible accounts receive a 7-day trial before paid billing begins.'}</Text></View>{error ? <Text variant="caption" color="danger">{error}</Text> : null}<Button label={working === 'purchase' ? 'Opening secure Stripe…' : isPro ? 'Upgrade to DOIT MAX' : `Start ${tierCopy[tier].name}`} disabled={loading || Boolean(working) || !selectedProduct} icon={tier === 'max' ? 'flash' : 'diamond'} onPress={purchase} /></Card>}
+      <Card style={styles.cta}><View style={styles.ctaCopy}><Text variant="eyebrow" color="accent">{isPro ? 'UPGRADE YOUR SYSTEM' : 'START BUILDING'}</Text><Text variant="heading">{isPro ? 'Move from Pro to DOIT MAX' : `Start with ${tierCopy[tier].name}`}</Text><Text variant="caption" color="secondary">{isPro ? 'Stripe will show the exact prorated amount before you confirm.' : `Eligible accounts receive a ${SUBSCRIPTION_TRIAL_DAYS}-day trial before paid billing begins.`}</Text></View>{error ? <Text variant="caption" color="danger">{error}</Text> : null}<Button label={working === 'purchase' ? 'Opening secure Stripe…' : isPro ? 'Upgrade to DOIT MAX' : `Start ${SUBSCRIPTION_TRIAL_DAYS}-day ${tierCopy[tier].name} trial`} disabled={loading || Boolean(working) || !selectedProduct} icon={tier === 'max' ? 'flash' : 'diamond'} onPress={purchase} /></Card>}
 
     {!web ? <Button label={working === 'restore' ? 'Restoring…' : 'Restore purchases'} disabled={Boolean(working) || !storeReady} variant="ghost" onPress={restore} /> : null}
     {!isMax && !selectedProduct && !loading ? <Card style={styles.unavailable}><Ionicons name="information-circle-outline" color={colors.textMuted} size={20} /><Text variant="caption" color="secondary">{configurationError ?? `${tierCopy[tier].name} ${period} pricing has not been connected yet.`}</Text></Card> : null}

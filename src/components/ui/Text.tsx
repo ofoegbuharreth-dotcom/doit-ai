@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { Platform, Text as RNText, StyleSheet } from 'react-native';
+import { Platform, Text as RNText, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { colors, typography, type ColorToken, type TypographyVariant } from '@/theme';
 
@@ -13,7 +13,9 @@ const colorMap: Record<NonNullable<Props['color']>, ColorToken> = {
 };
 
 export function Text({ variant = 'body', color = 'primary', style, maxFontSizeMultiplier = Platform.OS === 'android' ? 1.05 : 1.15, ...props }: Props) {
-  return <RNText {...props} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.base, typography[variant], Platform.OS === 'web' && webTypography[variant], { color: colors[colorMap[color]] }, style]} />;
+  const { width } = useWindowDimensions();
+  const desktopWeb = Platform.OS === 'web' && width >= 768;
+  return <RNText {...props} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.base, typography[variant], desktopWeb && webTypography[variant], { color: colors[colorMap[color]] }, style]} />;
 }
 
 const styles = StyleSheet.create({ base: { includeFontPadding: false } });

@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { AppState, Platform } from 'react-native';
 
 import { captureException, track } from '@/services/observability';
-import { normalisePlan, PLAN_LIMITS, planLabel, type DoitPlan } from '@/constants/subscription';
+import { normalisePlan, PLAN_LIMITS, planLabel, SUBSCRIPTION_TRIAL_DAYS, type DoitPlan } from '@/constants/subscription';
 import { loadStoreState, openStoreManagement, purchaseStorePackage, purchasesConfigured, restoreStorePurchases, type StoreProduct } from '@/services/purchases';
 import { isSupabaseConfigured, supabase } from '@/services/supabase';
 import { useAuth } from './use-auth';
@@ -82,7 +82,7 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
     }
     if (devPreviewEnabled) {
       const previewPlan = packageId?.startsWith('max_') ? 'max' : 'pro';
-      const next: SubscriptionState = { plan: previewPlan, status: 'trialing', trialEndsAt: new Date(Date.now() + 7 * 86400000).toISOString() };
+      const next: SubscriptionState = { plan: previewPlan, status: 'trialing', trialEndsAt: new Date(Date.now() + SUBSCRIPTION_TRIAL_DAYS * 86400000).toISOString() };
       await AsyncStorage.setItem(DEV_KEY, JSON.stringify(next)); setSubscription(next); return {};
     }
     return { error: Platform.OS === 'web' ? 'Stripe billing is not configured yet.' : 'Add the RevenueCat public Android SDK key to the release environment.' };

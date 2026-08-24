@@ -2,6 +2,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { notifyOwnerOfStripeCancellation } from '../_shared/cancellation-notification.ts';
 import { allowedAppUrl, corsHeaders, formatPrice, json, pricePeriod, stripeRequest } from '../_shared/stripe.ts';
+import { stripeTrialParameters } from './trial.ts';
 
 type PaidTier = 'pro' | 'max';
 type Interval = 'monthly' | 'annual';
@@ -180,7 +181,6 @@ Deno.serve(async (request) => {
 
       const successUrl = appReturnUrl('pro', 'checkout=success&session_id={CHECKOUT_SESSION_ID}');
       const cancelUrl = appReturnUrl('pro', 'checkout=cancelled');
-      const trialEligible = Number(subscription?.trial_use_count ?? 0) < 2;
       const session = await stripeRequest('/checkout/sessions', {
         mode: 'subscription',
         integration_identifier: 'doitweb_rkqmtzpa',
@@ -196,7 +196,7 @@ Deno.serve(async (request) => {
         'subscription_data[metadata][user_id]': user.id,
         'subscription_data[metadata][app]': 'DOIT AI',
         'subscription_data[metadata][doit_plan]': tier,
-        ...(trialEligible ? { 'subscription_data[trial_period_days]': 7 } : {}),
+        ...stripeTrialParameters(subscription?.trial_use_count),
       });
       if (Deno.env.get('STRIPE_LIVE_MODE') === 'true' && !session.livemode) throw new Error('Stripe returned a test checkout while live billing is required.');
       return json({ url: session.url });

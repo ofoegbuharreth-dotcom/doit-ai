@@ -1,5 +1,31 @@
 [
   {
+    "version": "1.2.14",
+    "date": "2026-08-24",
+    "title": "Try the full system in three focused days.",
+    "summary": "New eligible DOIT Pro and DOIT MAX subscriptions now begin with a three-day trial across Stripe and native store builds.",
+    "highlights": [
+      "Three-day introductory trial for eligible Pro subscribers",
+      "Three-day introductory trial for eligible MAX subscribers",
+      "Matching trial countdowns across web, desktop, Android, and iOS",
+      "Existing subscribers keep the trial end date already promised at checkout"
+    ]
+  },
+  {
+    "version": "1.2.13",
+    "date": "2026-08-24",
+    "title": "Made to fit every screen.",
+    "summary": "DOIT now scales cleanly across Android phones, iPhones, tablets, iPads, installed web apps, and rotated screens.",
+    "highlights": [
+      "Phone-sized typography instead of desktop text squeezed onto mobile",
+      "Stable navigation sizing with separate phone and tablet layouts",
+      "Safe spacing around notches, gesture bars, and screen edges",
+      "Responsive cards, progress panels, and metadata on narrow phones",
+      "Better use of tablet width without stretching content too far",
+      "Improved landscape support and shorter-screen sheet positioning"
+    ]
+  },
+  {
     "version": "1.2.12",
     "date": "2026-08-23",
     "title": "Google sign-in lands where it should.",

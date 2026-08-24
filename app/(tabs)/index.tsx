@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router as expoRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, FadeOutUp, SlideInDown, ZoomIn } from 'react-native-reanimated';
 
 import { NewGoalButton } from './_layout';
@@ -24,6 +24,8 @@ const priorityRank = { high: 0, medium: 1, low: 2 };
 const router = expoRouter as unknown as { push: (href: string) => void };
 
 export default function TodayScreen() {
+  const { width } = useWindowDimensions();
+  const narrow = width < 380;
   const params = useLocalSearchParams<{ stripe_return?: string }>();
   const { user } = useAuth();
   const { adaptationLimit, planName } = useSubscription();
@@ -80,13 +82,13 @@ export default function TodayScreen() {
 
   return <>
     <Screen scrollable refreshing={syncing} onRefresh={refreshWorkspace} contentContainerStyle={styles.screen}>
-      <View style={styles.heroTop}><View style={styles.hero}><Text variant="body" color="secondary">{greeting()}, {personName}!</Text><Text variant="title">Today</Text><Text color="secondary">One clear move. Then the next.</Text></View><SyncStatus /></View>
+      <View style={[styles.heroTop, narrow && styles.heroTopNarrow]}><View style={styles.hero}><Text variant="body" color="secondary">{greeting()}, {personName}!</Text><Text variant="title">Today</Text><Text color="secondary">One clear move. Then the next.</Text></View><SyncStatus /></View>
       {cancellationNotice ? <Card style={styles.cancellationNotice}><Ionicons name={cancellationNotice === 'sent' ? 'checkmark-circle' : cancellationNotice === 'error' ? 'alert-circle' : 'mail-outline'} color={cancellationNotice === 'error' ? colors.danger : cancellationNotice === 'sent' ? colors.success : colors.accent} size={22} /><View style={styles.cancellationCopy}><Text variant="label">{cancellationNotice === 'sending' ? 'Confirming your cancellation…' : cancellationNotice === 'sent' ? 'Cancellation confirmed' : 'Cancellation confirmed, but the email needs another try'}</Text><Text variant="caption" color="secondary">{cancellationNotice === 'sending' ? 'DOIT is checking Stripe and sending the cancellation email.' : cancellationNotice === 'sent' ? 'The owner notification was sent successfully.' : 'Open Manage subscription and return here to retry, or contact support.'}</Text></View></Card> : null}
       {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Retry queued changes" variant="secondary" onPress={retrySync} /></Card> : null}
       {dailyPlanError ? <Card style={styles.syncError}><Text variant="label" color="danger">Today’s plan needs another try</Text><Text variant="caption" color="secondary">{dailyPlanError}</Text><Button label="Build today’s plan" variant="secondary" onPress={() => ensureTodayPlan(true)} /></Card> : null}
       {activation?.goalId ? <Card style={styles.activationCard}><View style={styles.activationIcon}><Ionicons name="rocket" color={colors.accent} size={22} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">FINISH YOUR 5-MINUTE SETUP</Text><Text variant="heading">Your first move is waiting.</Text><Text variant="caption" color="secondary">Complete it now to turn your new goal into real momentum.</Text></View><Button label="Finish setup" icon="arrow-forward" onPress={() => router.push(`/activation-action?goalId=${encodeURIComponent(activation.goalId!)}${activation.taskId ? `&taskId=${encodeURIComponent(activation.taskId)}` : ''}`)} /></Card> : null}
       {missedRoutineActions.length ? <Card style={styles.recoveryCard}><View style={styles.recoveryTop}><View style={styles.recoveryIcon}><Ionicons name="refresh" color={colors.accent} size={21} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">RECOVERY MODE</Text><Text variant="heading">No guilt. Let’s reset the routine.</Text></View></View><Text color="secondary">{missedRoutineActions.length} repeating {missedRoutineActions.length === 1 ? 'action is' : 'actions are'} waiting. DOIT can clear or rebalance them without piling everything onto today.</Text><Button label="Reset my routine" variant="secondary" icon="options-outline" onPress={() => setRecoveryOpen(true)} /></Card> : null}
-      <View style={styles.stats}>
+      <View style={[styles.stats, narrow && styles.statsNarrow]}>
         <Card style={styles.stat}><Ionicons name="flame" color={colors.warning} size={22} /><Text variant="heading">{streak}</Text><Text variant="caption" color="muted">day streak</Text></Card>
         <Card style={styles.statWide}><View style={styles.overviewTop}><Text variant="eyebrow" color="accent">DAILY PROGRESS</Text><Text variant="label" color="accent">{progress}%</Text></View><ProgressBar progress={progress} height={8} /><Text variant="caption" color="muted">{syncing ? 'Syncing…' : `${done} of ${todayTasks.length} complete`}</Text></Card>
       </View>
@@ -133,9 +135,9 @@ function SmallAction({ icon, label, onPress, disabled }: { icon: keyof typeof Io
 }
 
 const styles = StyleSheet.create({
-  screen: { gap: spacing.lg, paddingTop: spacing.lg }, heroTop: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }, hero: { flex: 1, gap: spacing.xs }, syncError: { borderColor: colors.danger, gap: spacing.sm },
-  stats: { flexDirection: 'row', gap: spacing.sm }, stat: { alignItems: 'center', gap: spacing.xxs, justifyContent: 'center', minWidth: 96 }, statWide: { flex: 1, gap: spacing.sm }, overviewTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  focusCard: { backgroundColor: colors.surfaceElevated, borderColor: colors.accent, gap: spacing.md }, focusIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, meta: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
+  screen: { gap: spacing.lg, paddingTop: spacing.lg }, heroTop: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }, heroTopNarrow: { flexDirection: 'column' }, hero: { flex: 1, gap: spacing.xs, minWidth: 0 }, syncError: { borderColor: colors.danger, gap: spacing.sm },
+  stats: { flexDirection: 'row', gap: spacing.sm }, statsNarrow: { flexDirection: 'column' }, stat: { alignItems: 'center', gap: spacing.xxs, justifyContent: 'center', minWidth: 96 }, statWide: { flex: 1, gap: spacing.sm }, overviewTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  focusCard: { backgroundColor: colors.surfaceElevated, borderColor: colors.accent, gap: spacing.md }, focusIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, meta: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between' },
   planning: { alignItems: 'center', flexDirection: 'row', gap: spacing.md }, planningCopy: { flex: 1, gap: spacing.xs }, cancellationNotice: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, cancellationCopy: { flex: 1, gap: spacing.xxs },
   activationCard: { backgroundColor: colors.accentMuted, borderColor: colors.accentBorder, gap: spacing.md }, activationIcon: { alignItems: 'center', backgroundColor: colors.background, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, activationCopy: { gap: spacing.xs },
   recoveryCard: { borderColor: colors.accentBorder, gap: spacing.md }, recoveryTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm }, recoveryIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 }, recoveryOverlay: { backgroundColor: colors.overlay, flex: 1, justifyContent: 'flex-end' }, recoverySheet: { backgroundColor: colors.surfaceElevated, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, gap: spacing.md, padding: spacing.lg, paddingBottom: spacing.xl }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: radius.pill, height: 4, width: 42 }, recoveryChoice: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 72, padding: spacing.md }, recoveryChoiceIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.sm, height: 40, justifyContent: 'center', width: 40 },

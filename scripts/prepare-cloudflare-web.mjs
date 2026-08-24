@@ -20,7 +20,16 @@ await cp(generatedNodeModules, vendorOutput, { recursive: true });
 await rm(generatedNodeModules, { recursive: true, force: true });
 
 const html = await readFile(htmlPath, 'utf8');
-await writeFile(htmlPath, html.replaceAll('/_expo/', '/expo-static/'), 'utf8');
+const responsiveStyles = `<style id="doit-responsive-root">
+  html, body, #root { width: 100%; min-height: 100%; min-height: 100dvh; margin: 0; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { overflow-x: hidden; overscroll-behavior-x: none; }
+  *, *::before, *::after { box-sizing: border-box; }
+</style>`;
+let preparedHtml = html.replaceAll('/_expo/', '/expo-static/');
+preparedHtml = preparedHtml.replace(/<meta name="viewport"[^>]*>/i, '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
+if (!preparedHtml.includes('doit-responsive-root')) preparedHtml = preparedHtml.replace('</head>', `${responsiveStyles}</head>`);
+await writeFile(htmlPath, preparedHtml, 'utf8');
 
 async function rewriteBundleAssetPaths(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
