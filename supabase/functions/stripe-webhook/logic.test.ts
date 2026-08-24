@@ -7,6 +7,7 @@ import {
   missingUserAcknowledgement,
   normalizedSubscriptionState,
   resolveExistingAppUser,
+  shouldNotifyCancellation,
   subscriptionAccessState,
   stripeCustomerId,
   webhookRoute,
@@ -88,5 +89,12 @@ describe('Stripe webhook subscription logic', () => {
       status: 200,
       body: { received: true, ignored: 'missing_app_user' },
     });
+  });
+
+  it('notifies for every confirmed cancellation until delivery is recorded', () => {
+    expect(shouldNotifyCancellation(null, true, 'trialing')).toBe(true);
+    expect(shouldNotifyCancellation(null, false, 'canceled')).toBe(true);
+    expect(shouldNotifyCancellation(null, false, 'active')).toBe(false);
+    expect(shouldNotifyCancellation('2026-08-24T20:00:00.000Z', true, 'trialing')).toBe(false);
   });
 });

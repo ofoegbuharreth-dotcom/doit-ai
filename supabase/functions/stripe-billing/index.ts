@@ -127,11 +127,16 @@ Deno.serve(async (request) => {
 
       const { error: syncError } = await admin.from('subscriptions').upsert(update, { onConflict: 'user_id' });
       if (syncError) throw syncError;
-      // The browser return is an explicit delivery checkpoint. Re-submit the
-      // stable idempotent Resend request even if the webhook already recorded
-      // acceptance; Resend prevents duplicates for the same subscription.
-      const notification = await notifyOwnerOfStripeCancellation(admin, user.id, stripeSubscription, subscription.plan, { forceDeliveryCheck: true });
-      return json({ confirmed: true, emailSent: Boolean(notification?.sent || notification?.duplicate) });
+      // Cancellation is already authoritative in Stripe. Email delivery is a
+      // separate retryable side effect and must not turn a successful billing
+      // operation into a misleading HTTP 500 response.
+      try {
+        const notification = await notifyOwnerOfStripeCancellation(admin, user.id, stripeSubscription, subscription.plan);
+        return json({ confirmed: true, emailSent: Boolean(notification?.sent || notification?.duplicate) });
+      } catch (emailError) {
+        console.error('Cancellation confirmed but owner email delivery failed:', emailError instanceof Error ? emailError.message : emailError);
+        return json({ confirmed: true, emailSent: false, emailError: 'The owner notification is queued for another attempt.' });
+      }
     }
 
     if (action === 'checkout') {

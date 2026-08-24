@@ -7,6 +7,7 @@ import {
   isSubscriptionEvent,
   missingUserAcknowledgement,
   resolveExistingAppUser,
+  shouldNotifyCancellation,
   subscriptionAccessState,
   stripeCustomerId,
   stripeSubscriptionId,
@@ -115,11 +116,11 @@ Deno.serve(async (request) => {
     const trialEndsAt = stripeSubscription?.trial_end ? new Date(Number(stripeSubscription.trial_end) * 1000).toISOString() : null;
     const trialStartedAt = stripeSubscription?.trial_start ? new Date(Number(stripeSubscription.trial_start) * 1000).toISOString() : null;
     const cancelAtPeriodEnd = Boolean(stripeSubscription.cancel_at_period_end);
-    const wasScheduledCancel = Boolean(previous?.cancel_at_period_end);
-    const wasCancelled = previous?.status === 'cancelled' || previous?.status === 'expired';
-    const becameScheduledCancel = cancelAtPeriodEnd && !wasScheduledCancel;
-    const immediateCancel = stripeStatus === 'canceled' && !wasCancelled && !wasScheduledCancel;
-    const shouldNotifyCancellation = !previous?.cancellation_notified_at && (becameScheduledCancel || immediateCancel);
+    // A status reconciliation or the browser return can save Stripe's
+    // cancelled state before this event arrives. Notification eligibility must
+    // therefore depend on the current authoritative state, not only on whether
+    // this particular delivery observed the transition.
+    const shouldSendCancellationEmail = shouldNotifyCancellation(previous?.cancellation_notified_at, cancelAtPeriodEnd, stripeStatus);
 
     const update: Record<string, unknown> = {
       user_id: userId,
@@ -154,7 +155,7 @@ Deno.serve(async (request) => {
     }
     if (error) throw error;
 
-    if (shouldNotifyCancellation) await notifyOwnerOfStripeCancellation(admin, userId, stripeSubscription, previous?.plan ?? paidTier);
+    if (shouldSendCancellationEmail) await notifyOwnerOfStripeCancellation(admin, userId, stripeSubscription, previous?.plan ?? paidTier);
     return { skipped: false } as const;
   };
 

@@ -1,5 +1,31 @@
 [
   {
+    "version": "1.2.16",
+    "date": "2026-08-24",
+    "title": "Return to DOIT. Stay in sync.",
+    "summary": "Workspace sync now resumes automatically after authentication, billing, and other external redirects across web, desktop, and mobile.",
+    "highlights": [
+      "Automatically resumes sync when DOIT becomes active again",
+      "Handles browser returns, desktop deep links, and mobile app links",
+      "Recovers from suspended network requests without restarting the app",
+      "Prevents older sync requests from overwriting fresh workspace data",
+      "Stops a failed request from displaying Syncing forever"
+    ]
+  },
+  {
+    "version": "1.2.15",
+    "date": "2026-08-24",
+    "title": "Cancellation emails that finish the job.",
+    "summary": "Stripe cancellations now wait for the restored session, retry failed owner notifications, and remain recoverable without reopening Stripe.",
+    "highlights": [
+      "Reliable owner emails for paid and trial cancellations",
+      "Automatic retries after returning from Stripe",
+      "Webhook reconciliation even when the app saved cancellation first",
+      "A dedicated retry button without repeating the cancellation",
+      "Clear separation between confirmed billing state and email delivery"
+    ]
+  },
+  {
     "version": "1.2.14",
     "date": "2026-08-24",
     "title": "Try the full system in three focused days.",

@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import * as Linking from 'expo-linking';
+import { AppState } from 'react-native';
 
 import { initialActivity, initialGoals, initialMilestones, initialTasks, demoUserId } from '@/constants/mock-data';
 import type { CalendarItem, DailyCheckIn, FocusSession, Goal, GoalActivity, GoalDraft, GoalPlanResponse, GoalProgressEntry, GoalStatus, Milestone, RecurrenceRule, Task, TaskDependency, TaskStatus, WeeklyReview } from '@/types';
@@ -9,7 +11,7 @@ import type { AgentAction } from '@/services/agent';
 import { openCalendarBlockFromIso } from '@/services/calendar';
 import { track } from '@/services/observability';
 import { buildRecoveryChanges, materialiseRecurringTasksThrough, recoveryCandidates, type RecoveryChoice, type RecurrenceChoice } from '@/services/recurrence';
-import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, workspaceSyncErrorMessage, type SyncState, type WorkspaceMutation } from '@/services/sync';
+import { executeWorkspaceMutation, flushWorkspaceQueue, getPendingWorkspaceMutationCount, isRetryableSyncError, queueWorkspaceMutation, subscribeToWorkspace, withWorkspaceSyncTimeout, workspaceSyncErrorMessage, type SyncState, type WorkspaceMutation } from '@/services/sync';
 import { syncNextActionWidget } from '@/services/widget';
 import { deleteGoalProgressRecord, deleteTaskDependencyRecord, editGoalProgressRecord, fetchWorkspace, isSupabaseConfigured, logGoalProgressRecord, persistNewTask, persistTaskDependency, persistTaskStatus } from '@/services/supabase';
 
@@ -94,6 +96,8 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   const planningRef = useRef(false);
   const pendingChangesRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRunRef = useRef(0);
 
   const updatePendingChanges = useCallback((count: number) => {
     pendingChangesRef.current = count;
@@ -101,17 +105,26 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   }, []);
 
   const refreshWorkspace = useCallback(async () => {
-    if (!isSupabaseConfigured || !user) { setSyncing(false); return; }
+    const run = ++refreshRunRef.current;
+    if (!isSupabaseConfigured || !user) {
+      setSyncing(false);
+      setSyncState('synced');
+      return;
+    }
     setSyncing(true); setSyncState('syncing'); setSyncError(null);
     try {
-      const data = await fetchWorkspace(user.id);
+      const data = await withWorkspaceSyncTimeout(fetchWorkspace(user.id));
+      if (run !== refreshRunRef.current) return;
       setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions); setTaskDependencies(data.taskDependencies); setCalendarItems(data.calendarItems); setWeeklyReviews(data.weeklyReviews); setRecurrenceRules(data.recurrenceRules);
       setLastSyncedAt(new Date().toISOString());
       setSyncState(pendingChangesRef.current ? 'saving' : 'synced');
     } catch (error) {
+      if (run !== refreshRunRef.current) return;
       setSyncError(workspaceSyncErrorMessage(error, 'Could not load your Supabase data.'));
       setSyncState(isRetryableSyncError(error) ? 'offline' : 'error');
-    } finally { setSyncing(false); }
+    } finally {
+      if (run === refreshRunRef.current) setSyncing(false);
+    }
   }, [user]);
 
   const flushPendingChanges = useCallback(async () => {
@@ -187,7 +200,43 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     });
   }, [flushPendingChanges, refreshWorkspace, user]);
 
-  useEffect(() => () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); }, []);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user) return;
+    let previousAppState = AppState.currentState;
+    const resumeSync = () => {
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = setTimeout(() => { void retrySync(); }, 250);
+    };
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && previousAppState !== 'active') resumeSync();
+      previousAppState = state;
+    });
+    const linkSubscription = Linking.addEventListener('url', resumeSync);
+    const onVisibility = () => { if (document.visibilityState === 'visible') resumeSync(); };
+    const onPageShow = () => resumeSync();
+    const onWindowFocus = () => resumeSync();
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pageshow', onPageShow);
+      window.addEventListener('focus', onWindowFocus);
+    }
+    return () => {
+      appStateSubscription.remove();
+      linkSubscription.remove();
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pageshow', onPageShow);
+        window.removeEventListener('focus', onWindowFocus);
+      }
+    };
+  }, [retrySync, user]);
+
+  useEffect(() => () => {
+    refreshRunRef.current += 1;
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const date = today();

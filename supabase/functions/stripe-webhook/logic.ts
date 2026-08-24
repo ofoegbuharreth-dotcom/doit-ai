@@ -78,3 +78,12 @@ export function missingUserAcknowledgement() {
     body: { received: true, ignored: 'missing_app_user' } as const,
   } as const;
 }
+
+export function shouldNotifyCancellation(
+  cancellationNotifiedAt: unknown,
+  cancelAtPeriodEnd: unknown,
+  stripeStatus: unknown,
+) {
+  if (cancellationNotifiedAt) return false;
+  return Boolean(cancelAtPeriodEnd) || String(stripeStatus ?? '') === 'canceled';
+}

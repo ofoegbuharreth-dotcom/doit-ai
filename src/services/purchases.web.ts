@@ -130,9 +130,10 @@ export async function openStoreManagement() {
 }
 
 export async function confirmStripeCancellation() {
-  const { data, error } = await supabase.functions.invoke<{ confirmed?: boolean; emailSent?: boolean; error?: string }>('stripe-billing', { body: { action: 'confirm-cancellation' } });
+  const { data, error } = await supabase.functions.invoke<{ confirmed?: boolean; emailSent?: boolean; emailError?: string; error?: string }>('stripe-billing', { body: { action: 'confirm-cancellation' } });
   if (error) throw new Error(await edgeFunctionMessage(error, 'DOIT could not confirm the Stripe cancellation.'));
   if (data?.error) throw new Error(data.error);
   if (!data?.confirmed) throw new Error('Stripe has not confirmed this cancellation.');
+  if (!data.emailSent) throw new Error(data.emailError || 'The owner notification could not be delivered yet.');
   return { emailSent: Boolean(data.emailSent) };
 }

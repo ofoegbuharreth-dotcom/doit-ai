@@ -37,6 +37,19 @@ export default function TodayScreen() {
   const [profileFirstName, setProfileFirstName] = useState('');
   const [activation, setActivation] = useState<FirstRunActivation | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false); const [recoveryWorking, setRecoveryWorking] = useState(false); const [recoveryError, setRecoveryError] = useState('');
+  const confirmCancellationEmail = useCallback(async () => {
+    setCancellationNotice('sending');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await confirmStripeCancellation();
+        setCancellationNotice('sent');
+        return;
+      } catch {
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)));
+      }
+    }
+    setCancellationNotice('error');
+  }, []);
   useEffect(() => { getFirstRunActivation().then((value) => setActivation(value?.phase === 'plan_ready' ? value : null)).catch(() => undefined); }, []);
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -47,15 +60,13 @@ export default function TodayScreen() {
   }, [user]));
   useEffect(() => { if (!celebrating) return; const timer = setTimeout(() => setCelebrating(false), 1750); return () => clearTimeout(timer); }, [celebrating]);
   useEffect(() => {
-    if (params.stripe_return !== 'cancelled') return;
-    let active = true;
-    setCancellationNotice('sending');
-    confirmStripeCancellation()
-      .then(() => { if (active) setCancellationNotice('sent'); })
-      .catch(() => { if (active) setCancellationNotice('error'); })
-      .finally(() => { expoRouter.setParams({ stripe_return: undefined }); });
-    return () => { active = false; };
-  }, [params.stripe_return]);
+    // Wait for Supabase to restore the signed-in session after the Stripe
+    // round-trip. Calling the Edge Function before `user` exists produces a
+    // false email failure even though Stripe completed the cancellation.
+    if (params.stripe_return !== 'cancelled' || !user) return;
+    expoRouter.setParams({ stripe_return: undefined });
+    void confirmCancellationEmail();
+  }, [confirmCancellationEmail, params.stripe_return, user]);
 
   const activeGoalIds = useMemo(() => new Set(goals.filter((goal) => goal.status === 'active').map((goal) => goal.id)), [goals]);
   const todayTasks = useMemo(() => tasks.filter((task) => task.scheduledDate === today() && task.status !== 'moved' && task.status !== 'skipped' && (!task.goalId || activeGoalIds.has(task.goalId))), [activeGoalIds, tasks]);
@@ -83,7 +94,7 @@ export default function TodayScreen() {
   return <>
     <Screen scrollable refreshing={syncing} onRefresh={refreshWorkspace} contentContainerStyle={styles.screen}>
       <View style={[styles.heroTop, narrow && styles.heroTopNarrow]}><View style={styles.hero}><Text variant="body" color="secondary">{greeting()}, {personName}!</Text><Text variant="title">Today</Text><Text color="secondary">One clear move. Then the next.</Text></View><SyncStatus /></View>
-      {cancellationNotice ? <Card style={styles.cancellationNotice}><Ionicons name={cancellationNotice === 'sent' ? 'checkmark-circle' : cancellationNotice === 'error' ? 'alert-circle' : 'mail-outline'} color={cancellationNotice === 'error' ? colors.danger : cancellationNotice === 'sent' ? colors.success : colors.accent} size={22} /><View style={styles.cancellationCopy}><Text variant="label">{cancellationNotice === 'sending' ? 'Confirming your cancellation…' : cancellationNotice === 'sent' ? 'Cancellation confirmed' : 'Cancellation confirmed, but the email needs another try'}</Text><Text variant="caption" color="secondary">{cancellationNotice === 'sending' ? 'DOIT is checking Stripe and sending the cancellation email.' : cancellationNotice === 'sent' ? 'The owner notification was sent successfully.' : 'Open Manage subscription and return here to retry, or contact support.'}</Text></View></Card> : null}
+      {cancellationNotice ? <Card style={styles.cancellationNotice}><Ionicons name={cancellationNotice === 'sent' ? 'checkmark-circle' : cancellationNotice === 'error' ? 'alert-circle' : 'mail-outline'} color={cancellationNotice === 'error' ? colors.danger : cancellationNotice === 'sent' ? colors.success : colors.accent} size={22} /><View style={styles.cancellationCopy}><Text variant="label">{cancellationNotice === 'sending' ? 'Confirming your cancellation…' : cancellationNotice === 'sent' ? 'Cancellation confirmed' : 'Cancellation confirmed · email pending'}</Text><Text variant="caption" color="secondary">{cancellationNotice === 'sending' ? 'DOIT is checking Stripe and sending the cancellation email.' : cancellationNotice === 'sent' ? 'The owner notification was accepted successfully.' : 'Your subscription is cancelled. The owner email can be retried without reopening Stripe.'}</Text></View>{cancellationNotice === 'error' ? <Button label="Retry email" variant="secondary" onPress={confirmCancellationEmail} /> : null}</Card> : null}
       {syncError ? <Card style={styles.syncError}><Text variant="label" color="danger">Couldn’t sync your data</Text><Text variant="caption" color="secondary">{syncError}</Text><Button label="Retry queued changes" variant="secondary" onPress={retrySync} /></Card> : null}
       {dailyPlanError ? <Card style={styles.syncError}><Text variant="label" color="danger">Today’s plan needs another try</Text><Text variant="caption" color="secondary">{dailyPlanError}</Text><Button label="Build today’s plan" variant="secondary" onPress={() => ensureTodayPlan(true)} /></Card> : null}
       {activation?.goalId ? <Card style={styles.activationCard}><View style={styles.activationIcon}><Ionicons name="rocket" color={colors.accent} size={22} /></View><View style={styles.activationCopy}><Text variant="eyebrow" color="accent">FINISH YOUR 5-MINUTE SETUP</Text><Text variant="heading">Your first move is waiting.</Text><Text variant="caption" color="secondary">Complete it now to turn your new goal into real momentum.</Text></View><Button label="Finish setup" icon="arrow-forward" onPress={() => router.push(`/activation-action?goalId=${encodeURIComponent(activation.goalId!)}${activation.taskId ? `&taskId=${encodeURIComponent(activation.taskId)}` : ''}`)} /></Card> : null}

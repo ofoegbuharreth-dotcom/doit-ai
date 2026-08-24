@@ -11,14 +11,14 @@ function formatPeriodEnd(value?: string | null) {
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' }).format(new Date(value));
 }
 
-export async function notifyOwnerOfStripeCancellation(admin: any, userId: string, stripeSubscription: any, previousPlan = 'pro', options: { forceDeliveryCheck?: boolean } = {}) {
+export async function notifyOwnerOfStripeCancellation(admin: any, userId: string, stripeSubscription: any, previousPlan = 'pro') {
   const { data: existing, error: existingError } = await admin
     .from('subscriptions')
-    .select('cancellation_notified_at')
+    .select('cancellation_notified_at, cancellation_email_error')
     .eq('user_id', userId)
     .maybeSingle();
   if (existingError) throw existingError;
-  if (existing?.cancellation_notified_at && !options.forceDeliveryCheck) return { duplicate: true };
+  if (existing?.cancellation_notified_at) return { duplicate: true };
 
   const attemptAt = new Date().toISOString();
   await admin.from('subscriptions').update({ cancellation_email_last_attempt_at: attemptAt }).eq('user_id', userId);
@@ -48,6 +48,7 @@ export async function notifyOwnerOfStripeCancellation(admin: any, userId: string
     const submittedAt = feedback?.created_at ?? attemptAt;
     const plan = feedback?.previous_plan ?? previousPlan ?? 'pro';
 
+    const previousDeliveryFailed = /^(Provider|Network):/.test(String(existing?.cancellation_email_error ?? ''));
     await sendCancellationOwnerEmail({
       userEmail: user?.email,
       userId,
@@ -56,7 +57,10 @@ export async function notifyOwnerOfStripeCancellation(admin: any, userId: string
       details,
       submittedAt,
       source: 'stripe_webhook',
-      idempotencyKey: `doit-stripe-cancellation-${stripeSubscription?.id ?? userId}`,
+      // Preserve the stable key after an accepted request/database failure so
+      // replay cannot duplicate mail. A known provider/network rejection gets
+      // a fresh key, allowing a repaired Resend configuration to really retry.
+      idempotencyKey: `doit-stripe-cancellation-${stripeSubscription?.id ?? userId}${previousDeliveryFailed ? `-retry-${attemptAt.replace(/\D/g, '')}` : ''}`,
     });
 
     const notifiedAt = new Date().toISOString();

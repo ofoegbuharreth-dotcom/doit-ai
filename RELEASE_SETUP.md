@@ -15,7 +15,7 @@ Do not use a RevenueCat secret key in the app. The paywall displays Google Play'
 
 ## 2. Supabase
 
-Deploy `supabase/migrations/008_release_subscriptions.sql`. Keep the existing `send-cancellation-feedback` Edge Function deployed so cancellation feedback can be emailed.
+Deploy all Supabase migrations. Cancellation delivery uses the shared email module bundled into `stripe-billing`, `stripe-webhook`, and `send-cancellation-feedback`, so redeploy all three functions whenever that module changes. Keep `RESEND_API_KEY`, `FEEDBACK_TO_EMAIL`, and `FEEDBACK_FROM_EMAIL` configured in Supabase Edge Function secrets.
 
 For production, validate all Pro-only operations on the server using RevenueCat webhooks or trusted entitlement records. Client-side feature gates improve UX but are not a security boundary.
 

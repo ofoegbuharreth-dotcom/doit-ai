@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { bindMutationToUser } from './workspace-ownership';
 import { isRecurrenceOwnershipMismatch, isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
+import { withWorkspaceSyncTimeout } from './sync-timeout';
 
 describe('workspace sync recovery', () => {
   it('shows the useful message from Supabase error objects', () => {
@@ -33,5 +34,17 @@ describe('workspace sync recovery', () => {
     expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'new row violates row-level security policy for table "recurrence_rules"' }, recurrence)).toBe(true);
     expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'blocked' }, recurrence)).toBe(false);
     expect(isRecurrenceOwnershipMismatch({ code: '42501', message: 'new row violates row-level security policy for table "recurrence_rules"' }, { type: 'goal_plan' })).toBe(false);
+  });
+
+  it('ends a suspended workspace request instead of leaving the UI syncing forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const result = withWorkspaceSyncTimeout(new Promise<never>(() => undefined), 100);
+      const rejection = expect(result).rejects.toThrow('Workspace sync timed out');
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
