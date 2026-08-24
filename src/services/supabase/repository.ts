@@ -6,19 +6,21 @@ const milestoneFromRow = (row: Record<string, any>): Milestone => ({ id: row.id,
 const taskFromRow = (row: Record<string, any>): Task => ({ id: row.id, goalId: row.goal_id ?? undefined, userId: row.user_id, title: row.title, description: row.description ?? '', scheduledDate: row.scheduled_date, status: row.status, priority: row.priority, estimatedMinutes: row.estimated_minutes ?? 0, actualMinutes: row.actual_minutes ?? undefined, energyLevel: row.energy_level ?? undefined, deadline: row.deadline ?? undefined, flexibility: row.scheduling_flexibility ?? undefined, recurrenceRuleId: row.recurrence_rule_id ?? undefined, tags: row.tags ?? undefined, notes: row.notes ?? undefined, aiGenerated: row.ai_generated, createdAt: row.created_at, completedAt: row.completed_at ?? undefined, moveCount: row.move_count ?? 0 });
 const activityFromRow = (row: Record<string, any>): GoalActivity => ({ id: row.id, goalId: row.goal_id ?? undefined, userId: row.user_id, type: row.type, title: row.title, detail: row.detail ?? undefined, createdAt: row.created_at });
 
-export async function fetchWorkspace(userId: string) {
+const withAbortSignal = <T extends { abortSignal: (signal: AbortSignal) => T }>(query: T, signal?: AbortSignal) => signal ? query.abortSignal(signal) : query;
+
+export async function fetchWorkspace(userId: string, signal?: AbortSignal) {
   const [goals, milestones, tasks, activity, checkIns, progressEntries, focusSessions, taskDependencies, calendarItems, weeklyReviews, recurrenceRules] = await Promise.all([
-    supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('milestones').select('*, goals!inner(user_id)').eq('goals.user_id', userId).order('sort_order'),
-    supabase.from('tasks').select('*').eq('user_id', userId).order('scheduled_date'),
-    supabase.from('goal_activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('daily_checkins').select('*').eq('user_id', userId).order('date', { ascending: false }),
-    supabase.from('goal_progress_entries').select('*').eq('user_id', userId).order('recorded_on', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('focus_sessions').select('*').eq('user_id', userId).order('started_at', { ascending: false }).limit(200),
-    supabase.from('task_dependencies').select('*').eq('user_id', userId).order('created_at'),
-    supabase.from('calendar_items').select('*').eq('user_id', userId).order('start_time'),
-    supabase.from('weekly_reviews').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(8),
-    supabase.from('recurrence_rules').select('*').eq('user_id', userId).order('created_at'),
+    withAbortSignal(supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: false }), signal),
+    withAbortSignal(supabase.from('milestones').select('*, goals!inner(user_id)').eq('goals.user_id', userId).order('sort_order'), signal),
+    withAbortSignal(supabase.from('tasks').select('*').eq('user_id', userId).order('scheduled_date'), signal),
+    withAbortSignal(supabase.from('goal_activity').select('*').eq('user_id', userId).order('created_at', { ascending: false }), signal),
+    withAbortSignal(supabase.from('daily_checkins').select('*').eq('user_id', userId).order('date', { ascending: false }), signal),
+    withAbortSignal(supabase.from('goal_progress_entries').select('*').eq('user_id', userId).order('recorded_on', { ascending: false }).order('created_at', { ascending: false }), signal),
+    withAbortSignal(supabase.from('focus_sessions').select('*').eq('user_id', userId).order('started_at', { ascending: false }).limit(200), signal),
+    withAbortSignal(supabase.from('task_dependencies').select('*').eq('user_id', userId).order('created_at'), signal),
+    withAbortSignal(supabase.from('calendar_items').select('*').eq('user_id', userId).order('start_time'), signal),
+    withAbortSignal(supabase.from('weekly_reviews').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(8), signal),
+    withAbortSignal(supabase.from('recurrence_rules').select('*').eq('user_id', userId).order('created_at'), signal),
   ]);
   const error = goals.error ?? milestones.error ?? tasks.error ?? activity.error ?? checkIns.error ?? progressEntries.error ?? focusSessions.error ?? taskDependencies.error ?? calendarItems.error ?? weeklyReviews.error ?? recurrenceRules.error;
   if (error) throw error;

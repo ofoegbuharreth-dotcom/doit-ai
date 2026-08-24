@@ -15,7 +15,7 @@ import { accentPalettes, colors, radius, spacing, useAccentTheme, type AccentId,
 const router = expoRouter as unknown as { push: (href: string) => void; replace: (href: string) => void };
 
 export default function ProfileScreen() {
-  const { user, signOut, deleteAccount, demoMode } = useAuth();
+  const { user, signOut, deleteAccount, changePassword, resetPassword, demoMode } = useAuth();
   const { isPro, isMax, planName, status, trialDaysLeft } = useSubscription();
   const { devices, currentDeviceId, loading: devicesLoading, error: devicesError, revoke: revokeDevice } = useDeviceSessions();
   const { accentId, colorMode, palette, setAccentId, setColorMode } = useAccentTheme();
@@ -37,6 +37,13 @@ export default function ProfileScreen() {
   const [profileAvatarPath, setProfileAvatarPath] = useState<string>();
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
   const canDelete = deleteConfirmation === 'Delete';
   const isOwner = isOwnerEmail(user?.email);
 
@@ -99,6 +106,32 @@ export default function ProfileScreen() {
     const next = !analyticsEnabled;
     setAnalyticsEnabledState(next);
     await setTelemetryEnabled(next);
+  };
+
+  const openPasswordEditor = () => {
+    setProfileModalVisible(false);
+    setCurrentPassword(''); setNewPassword(''); setNewPasswordConfirmation('');
+    setPasswordError(''); setPasswordMessage(''); setPasswordModalVisible(true);
+  };
+  const savePassword = async () => {
+    if (passwordSaving) return;
+    setPasswordError(''); setPasswordMessage('');
+    if (newPassword !== newPasswordConfirmation) return setPasswordError('Your new passwords do not match.');
+    if (newPassword === currentPassword) return setPasswordError('Choose a new password that is different from your current one.');
+    setPasswordSaving(true);
+    const result = await changePassword(currentPassword, newPassword);
+    setPasswordSaving(false);
+    if (result.error) return setPasswordError(result.error);
+    setCurrentPassword(''); setNewPassword(''); setNewPasswordConfirmation('');
+    setPasswordMessage('Password changed successfully on your account.');
+  };
+  const sendPasswordReset = async () => {
+    if (!user?.email || passwordSaving) return;
+    setPasswordSaving(true); setPasswordError(''); setPasswordMessage('');
+    const result = await resetPassword(user.email);
+    setPasswordSaving(false);
+    if (result.error) return setPasswordError(result.error);
+    setPasswordMessage(`Reset instructions were sent to ${user.email}.`);
   };
 
   const logout = async () => { await signOut(); router.replace('/(auth)/login'); };
@@ -250,8 +283,28 @@ export default function ProfileScreen() {
               })}
             </View>
           </View>
+          <Pressable accessibilityRole="button" onPress={openPasswordEditor} style={styles.securityLink}><View style={styles.securityIcon}><Ionicons name="key-outline" color={colors.accent} size={19} /></View><View style={styles.flex}><Text variant="label">Change password</Text><Text variant="caption" color="muted">Confirm your current password before choosing a new one.</Text></View><Ionicons name="chevron-forward" color={colors.textMuted} size={18} /></Pressable>
           {profileError ? <Text variant="caption" color="danger">{profileError}</Text> : null}
           <Button label={profileSaving ? 'Saving…' : 'Save profile'} disabled={profileSaving} icon="checkmark" onPress={saveProfile} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    <Modal visible={passwordModalVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !passwordSaving && setPasswordModalVisible(false)}>
+      <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable accessibilityLabel="Close password editor" style={StyleSheet.absoluteFill} onPress={() => !passwordSaving && setPasswordModalVisible(false)} />
+        <View accessibilityViewIsModal style={styles.profileDialog}>
+          <View style={styles.profileDialogTop}><View><Text variant="eyebrow" color="accent">ACCOUNT SECURITY</Text><Text variant="title">Change password</Text></View><Pressable hitSlop={12} onPress={() => !passwordSaving && setPasswordModalVisible(false)}><Ionicons name="close" color={colors.textSecondary} size={24} /></Pressable></View>
+          <Text color="secondary">Verify your current password, then choose a new password with at least eight characters.</Text>
+          {!passwordMessage ? <>
+            <Input label="Current password" value={currentPassword} onChangeText={(value) => { setCurrentPassword(value); setPasswordError(''); }} placeholder="Your current password" secureTextEntry autoComplete="current-password" />
+            <Input label="New password" value={newPassword} onChangeText={(value) => { setNewPassword(value); setPasswordError(''); }} placeholder="At least 8 characters" secureTextEntry autoComplete="new-password" />
+            <Input label="Confirm new password" value={newPasswordConfirmation} onChangeText={(value) => { setNewPasswordConfirmation(value); setPasswordError(''); }} placeholder="Enter it again" secureTextEntry autoComplete="new-password" onSubmitEditing={savePassword} />
+          </> : null}
+          {passwordError ? <Text variant="caption" color="danger">{passwordError}</Text> : null}
+          {passwordMessage ? <View style={styles.passwordSuccess}><Ionicons name="checkmark-circle" color={colors.success} size={21} /><Text variant="caption" style={styles.flex}>{passwordMessage}</Text></View> : null}
+          {passwordMessage ? <Button label="Done" icon="checkmark" onPress={() => setPasswordModalVisible(false)} /> : <Button label={passwordSaving ? 'Checking…' : 'Change password'} icon="shield-checkmark-outline" disabled={passwordSaving} onPress={savePassword} />}
+          {!passwordMessage ? <Pressable disabled={passwordSaving} onPress={sendPasswordReset} style={styles.forgotPassword}><Text variant="caption" color="accent">Forgot your current password? Email me a reset link</Text></Pressable> : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -288,4 +341,5 @@ const styles = StyleSheet.create({
   cancelDelete: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
   profileDialog: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: radius.xl, borderWidth: 1, gap: spacing.lg, maxWidth: 520, padding: spacing.lg, width: '100%' },
   profileDialogTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, avatarEditor: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.md }, avatarLarge: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.accent, borderRadius: radius.pill, borderWidth: 1, height: 76, justifyContent: 'center', overflow: 'hidden', width: 76 }, photoButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.xs, minHeight: 36 }, genderField: { gap: spacing.xs }, genderOptions: { gap: spacing.xs }, genderOption: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 48, paddingHorizontal: spacing.md }, genderOptionSelected: { backgroundColor: colors.accentMuted, borderColor: colors.accent }, radio: { alignItems: 'center', borderColor: colors.textMuted, borderRadius: radius.pill, borderWidth: 1, height: 18, justifyContent: 'center', width: 18 }, radioSelected: { borderColor: colors.accent }, radioDot: { backgroundColor: colors.accent, borderRadius: radius.pill, height: 10, width: 10 },
+  securityLink: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 68, paddingHorizontal: spacing.md }, securityIcon: { alignItems: 'center', backgroundColor: colors.accentMuted, borderRadius: radius.md, height: 38, justifyContent: 'center', width: 38 }, passwordSuccess: { alignItems: 'center', backgroundColor: colors.accentMuted, borderColor: colors.success, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, padding: spacing.md }, forgotPassword: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
 });

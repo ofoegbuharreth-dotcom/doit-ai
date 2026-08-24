@@ -11,7 +11,7 @@ export function isAuthCallbackUrl(url: string | null | undefined) {
 export function desktopAuthDeepLink(url: string) {
   const parsed = new URL(url);
   const params = new URLSearchParams();
-  ['code', 'error', 'error_code', 'error_description', 'provider'].forEach((key) => {
+  ['code', 'error', 'error_code', 'error_description', 'provider', 'intent'].forEach((key) => {
     const value = parsed.searchParams.get(key);
     if (value) params.set(key, value);
   });

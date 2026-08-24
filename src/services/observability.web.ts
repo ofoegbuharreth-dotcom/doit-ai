@@ -74,7 +74,7 @@ export const Sentry = {
 
 export type AnalyticsEvent =
   | 'account signed up' | 'account signed in' | 'account signed out'
-  | 'password reset requested' | 'password reset completed'
+  | 'password reset requested' | 'password reset completed' | 'google account password created' | 'account password changed'
   | 'onboarding viewed' | 'onboarding completed'
   | 'activation started' | 'activation goal submitted' | 'activation plan created' | 'activation first action started' | 'activation completed' | 'activation skipped'
   | 'goal created' | 'focus started' | 'focus completed' | 'product feedback submitted'

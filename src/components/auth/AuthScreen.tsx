@@ -45,7 +45,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
 
   const continueWithGoogle = async () => {
     setGoogleLoading(true); setGoogleNotice(''); setGoogleError(''); setError('');
-    const result = await signInWithGoogle(rememberMe);
+    const result = await signInWithGoogle(rememberMe, mode);
     if (result.error) { setGoogleError(result.error); setGoogleLoading(false); return; }
     if (result.oauthOpened && typeof window !== 'undefined' && window.doitDesktop?.isDesktop) {
       setGoogleNotice('Finish securely in the browser. DOIT will reopen automatically.');

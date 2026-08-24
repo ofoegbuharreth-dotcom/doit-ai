@@ -9,8 +9,8 @@ describe('auth URL helpers', () => {
   });
 
   it('hands only expected OAuth values back to the desktop app', () => {
-    const result = desktopAuthDeepLink('https://doit-ai.pages.dev/auth/callback?desktop=1&provider=google&code=secure-code&unexpected=drop-me');
-    expect(result).toBe('doit://auth/callback?code=secure-code&provider=google');
+    const result = desktopAuthDeepLink('https://doit-ai.pages.dev/auth/callback?desktop=1&provider=google&intent=signup&code=secure-code&unexpected=drop-me');
+    expect(result).toBe('doit://auth/callback?code=secure-code&provider=google&intent=signup');
   });
 
   it('preserves safe provider errors for the desktop callback UI', () => {

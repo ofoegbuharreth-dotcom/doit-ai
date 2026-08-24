@@ -98,6 +98,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRunRef = useRef(0);
+  const refreshAbortRef = useRef<AbortController | null>(null);
 
   const updatePendingChanges = useCallback((count: number) => {
     pendingChangesRef.current = count;
@@ -106,6 +107,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
 
   const refreshWorkspace = useCallback(async () => {
     const run = ++refreshRunRef.current;
+    refreshAbortRef.current?.abort();
     if (!isSupabaseConfigured || !user) {
       setSyncing(false);
       setSyncState('synced');
@@ -113,7 +115,25 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
     }
     setSyncing(true); setSyncState('syncing'); setSyncError(null);
     try {
-      const data = await withWorkspaceSyncTimeout(fetchWorkspace(user.id));
+      const load = async () => {
+        const controller = new AbortController();
+        refreshAbortRef.current = controller;
+        try {
+          return await withWorkspaceSyncTimeout(fetchWorkspace(user.id, controller.signal), undefined, () => controller.abort());
+        } finally {
+          if (refreshAbortRef.current === controller) refreshAbortRef.current = null;
+        }
+      };
+      let data;
+      try {
+        data = await load();
+      } catch (firstError) {
+        if (run !== refreshRunRef.current) return;
+        if (!isRetryableSyncError(firstError)) throw firstError;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        if (run !== refreshRunRef.current) return;
+        data = await load();
+      }
       if (run !== refreshRunRef.current) return;
       setGoals(data.goals); setMilestones(data.milestones); setTasks(data.tasks); setActivity(data.activity); setCheckIns(data.checkIns); setProgressEntries(data.progressEntries); setFocusSessions(data.focusSessions); setTaskDependencies(data.taskDependencies); setCalendarItems(data.calendarItems); setWeeklyReviews(data.weeklyReviews); setRecurrenceRules(data.recurrenceRules);
       setLastSyncedAt(new Date().toISOString());
@@ -234,6 +254,7 @@ export function AppStoreProvider({ children }: PropsWithChildren) {
 
   useEffect(() => () => {
     refreshRunRef.current += 1;
+    refreshAbortRef.current?.abort();
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
   }, []);

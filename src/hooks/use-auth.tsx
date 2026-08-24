@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import type { User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { AppState, Platform } from 'react-native';
 
 import { authRememberKey, emailVerificationRedirectUrl, isAuthCallbackUrl, isPasswordRecoveryUrl, isSupabaseConfigured, passwordRecoveryRedirectUrl, resendSignupVerification, stripeReturnSessionKey, supabase } from '@/services';
 import { clearPendingReferralCode, getPendingReferralCode } from '@/services/growth';
@@ -14,10 +15,12 @@ interface AuthContextValue {
   demoMode: boolean;
   signIn: (email: string, password: string, rememberMe: boolean) => Promise<AuthResult>;
   signUp: (email: string, password: string, name: string, rememberMe: boolean) => Promise<AuthResult>;
-  signInWithGoogle: (rememberMe: boolean) => Promise<AuthResult>;
+  signInWithGoogle: (rememberMe: boolean, intent?: 'login' | 'signup') => Promise<AuthResult>;
   resendVerification: (email: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
+  setInitialPassword: (password: string) => Promise<AuthResult>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<AuthResult>;
 }
@@ -62,6 +65,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
     initialize();
     return () => { active = false; data.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || Platform.OS === 'web') return;
+    if (AppState.currentState === 'active') supabase.auth.startAutoRefresh();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') supabase.auth.startAutoRefresh();
+      else supabase.auth.stopAutoRefresh();
+    });
+    return () => {
+      subscription.remove();
+      supabase.auth.stopAutoRefresh();
+    };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string, rememberMe: boolean) => {
@@ -117,15 +133,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { error: error?.message, requiresEmailVerification: Boolean(data.user && !data.session) };
   }, []);
 
-  const signInWithGoogle = useCallback(async (rememberMe: boolean) => {
+  const signInWithGoogle = useCallback(async (rememberMe: boolean, intent: 'login' | 'signup' = 'login') => {
     if (!isSupabaseConfigured) return { error: 'Google sign-in requires the connected DOIT authentication service.' };
     await saveRememberPreference(rememberMe);
     const installedDesktop = typeof window !== 'undefined' && Boolean(window.doitDesktop?.isDesktop);
     const redirectTo = installedDesktop
-      ? 'https://doit-ai.pages.dev/auth/callback?provider=google&desktop=1'
+      ? `https://doit-ai.pages.dev/auth/callback?provider=google&intent=${intent}&desktop=1`
       : typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback?provider=google`
-        : 'doit://auth/callback?provider=google';
+        ? `${window.location.origin}/auth/callback?provider=google&intent=${intent}`
+        : `doit://auth/callback?provider=google&intent=${intent}`;
     const manualBrowser = installedDesktop || typeof window === 'undefined';
     const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: manualBrowser } });
     if (error) return { error: error.message };
@@ -165,6 +181,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return {};
   }, []);
 
+  const setInitialPassword = useCallback(async (password: string) => {
+    if (password.length < 8) return { error: 'Use at least 8 characters.' };
+    if (!isSupabaseConfigured) return {};
+    const { data, error } = await supabase.auth.updateUser({
+      password,
+      data: { doit_password_created_at: new Date().toISOString() },
+    });
+    if (error) return { error: error.message };
+    if (data.user) setUser(data.user);
+    track('google account password created');
+    return {};
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    if (!currentPassword) return { error: 'Enter your current password.' };
+    if (newPassword.length < 8) return { error: 'Your new password needs at least 8 characters.' };
+    const email = user?.email;
+    if (!isSupabaseConfigured || !email) return { error: 'Your account email is unavailable. Use password reset instead.' };
+    const { error: verificationError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (verificationError) return { error: 'Your current password is incorrect. Try again or use password reset.' };
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { error: error.message };
+    if (data.user) setUser(data.user);
+    track('account password changed');
+    return {};
+  }, [user?.email]);
+
   const signOut = useCallback(async () => {
     track('account signed out');
     if (isSupabaseConfigured) await supabase.auth.signOut({ scope: 'local' });
@@ -182,7 +225,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return {};
   }, []);
 
-  const value = useMemo(() => ({ user, loading, demoMode: !isSupabaseConfigured, signIn, signUp, signInWithGoogle, resendVerification, resetPassword, updatePassword, signOut, deleteAccount }), [deleteAccount, loading, resendVerification, resetPassword, signIn, signInWithGoogle, signOut, signUp, updatePassword, user]);
+  const value = useMemo(() => ({ user, loading, demoMode: !isSupabaseConfigured, signIn, signUp, signInWithGoogle, resendVerification, resetPassword, updatePassword, setInitialPassword, changePassword, signOut, deleteAccount }), [changePassword, deleteAccount, loading, resendVerification, resetPassword, setInitialPassword, signIn, signInWithGoogle, signOut, signUp, updatePassword, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

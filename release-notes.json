@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.2.18",
+    "date": "2026-08-24",
+    "title": "Secure accounts. Faster, tougher sync.",
+    "summary": "New Google accounts create a backup password before setup, Profile gains verified password changes, and workspace sync now cancels, retries, and serialises work safely across every platform.",
+    "highlights": [
+      "Password creation for brand-new Google signups",
+      "Secure current-password verification before password changes",
+      "Password-reset email fallback directly from Profile",
+      "Cancellable workspace requests with a fast timeout and automatic retry",
+      "Race-free queued writes across web, desktop, Android, and iOS",
+      "Native session refresh recovery after leaving and reopening DOIT"
+    ]
+  },
+  {
     "version": "1.2.17",
     "date": "2026-08-24",
     "title": "Update once. Skip the installer.",

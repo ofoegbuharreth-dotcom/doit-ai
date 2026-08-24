@@ -16,6 +16,7 @@ import {
 import { supabase } from '@/services/supabase/client';
 import { isRecurrenceOwnershipMismatch, isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 import { bindMutationToUser } from './workspace-ownership';
+import { withWorkspaceSyncTimeout } from './sync-timeout';
 
 export { isSafelyStaleQueuedMutation, workspaceSyncErrorMessage } from './sync-errors';
 
@@ -37,6 +38,8 @@ type QueuedMutation = { id: string; userId: string; createdAt: string; mutation:
 
 const queueKey = (userId: string) => `doit:workspace-sync-queue:${userId}`;
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const queueLocks = new Map<string, Promise<unknown>>();
+const queueFlushes = new Map<string, Promise<{ completed: number; discarded: number; remaining: number }>>();
 const makeUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
   const value = Math.floor(Math.random() * 16);
   return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
@@ -56,18 +59,29 @@ async function writeQueue(userId: string, queue: QueuedMutation[]) {
   else await AsyncStorage.removeItem(queueKey(userId));
 }
 
+function withQueueLock<T>(userId: string, operation: () => Promise<T>) {
+  const previous = queueLocks.get(userId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  queueLocks.set(userId, current);
+  return current.finally(() => {
+    if (queueLocks.get(userId) === current) queueLocks.delete(userId);
+  });
+}
+
 export async function queueWorkspaceMutation(userId: string, mutation: WorkspaceMutation) {
-  const queue = await readQueue(userId);
-  const ownedMutation = bindMutationToUser(mutation, userId);
-  const dedupeKey = ownedMutation.type === 'task_status' || ownedMutation.type === 'task_changes' ? `task:${ownedMutation.task.id}`
-    : ownedMutation.type === 'goal_changes' ? `goal:${ownedMutation.goal.id}`
-      : ownedMutation.type === 'check_in' ? `checkin:${ownedMutation.checkIn.date}` : undefined;
-  const next = dedupeKey
-    ? queue.filter((item) => mutationKey(item.mutation) !== dedupeKey)
-    : queue;
-  next.push({ id: makeId(), userId, createdAt: new Date().toISOString(), mutation: ownedMutation });
-  await writeQueue(userId, next);
-  return next.length;
+  return withQueueLock(userId, async () => {
+    const queue = await readQueue(userId);
+    const ownedMutation = bindMutationToUser(mutation, userId);
+    const dedupeKey = ownedMutation.type === 'task_status' || ownedMutation.type === 'task_changes' ? `task:${ownedMutation.task.id}`
+      : ownedMutation.type === 'goal_changes' ? `goal:${ownedMutation.goal.id}`
+        : ownedMutation.type === 'check_in' ? `checkin:${ownedMutation.checkIn.date}` : undefined;
+    const next = dedupeKey
+      ? queue.filter((item) => mutationKey(item.mutation) !== dedupeKey)
+      : queue;
+    next.push({ id: makeId(), userId, createdAt: new Date().toISOString(), mutation: ownedMutation });
+    await writeQueue(userId, next);
+    return next.length;
+  });
 }
 
 function mutationKey(mutation: WorkspaceMutation) {
@@ -99,7 +113,7 @@ async function persistOwnedRecurrence(mutation: Extract<WorkspaceMutation, { typ
   }
 }
 
-export async function executeWorkspaceMutation(mutation: WorkspaceMutation, userId?: string) {
+async function executeWorkspaceMutationRequest(mutation: WorkspaceMutation, userId?: string) {
   if (userId) mutation = bindMutationToUser(mutation, userId);
   if (mutation.type === 'task_status') return assertResult(await persistTaskStatus(mutation.task, mutation.status));
   if (mutation.type === 'task_changes') return assertResult(await persistTaskChanges(mutation.task));
@@ -113,32 +127,44 @@ export async function executeWorkspaceMutation(mutation: WorkspaceMutation, user
   return persistGoalPlan(mutation.goal, mutation.plan, mutation.tasks, mutation.milestones);
 }
 
-export async function flushWorkspaceQueue(userId: string) {
-  const queue = await readQueue(userId);
-  let completed = 0;
-  let processed = 0;
-  let discarded = 0;
-  for (const item of queue) {
-    try {
-      await executeWorkspaceMutation(item.mutation, userId);
-      completed += 1;
-    } catch (error) {
-      if (!isSafelyStaleQueuedMutation(error, item.mutation)) throw error;
-      discarded += 1;
+export function executeWorkspaceMutation(mutation: WorkspaceMutation, userId?: string) {
+  return withWorkspaceSyncTimeout(Promise.resolve(executeWorkspaceMutationRequest(mutation, userId)));
+}
+
+export function flushWorkspaceQueue(userId: string) {
+  const existing = queueFlushes.get(userId);
+  if (existing) return existing;
+  const flush = withQueueLock(userId, async () => {
+    const queue = await readQueue(userId);
+    let completed = 0;
+    let processed = 0;
+    let discarded = 0;
+    for (const item of queue) {
+      try {
+        await executeWorkspaceMutation(item.mutation, userId);
+        completed += 1;
+      } catch (error) {
+        if (!isSafelyStaleQueuedMutation(error, item.mutation)) throw error;
+        discarded += 1;
+      }
+      processed += 1;
+      await writeQueue(userId, queue.slice(processed));
     }
-    processed += 1;
-    await writeQueue(userId, queue.slice(processed));
-  }
-  return { completed, discarded, remaining: queue.length - processed };
+    return { completed, discarded, remaining: queue.length - processed };
+  });
+  queueFlushes.set(userId, flush);
+  return flush.finally(() => {
+    if (queueFlushes.get(userId) === flush) queueFlushes.delete(userId);
+  });
 }
 
 export async function getPendingWorkspaceMutationCount(userId: string) {
-  return (await readQueue(userId)).length;
+  return withQueueLock(userId, async () => (await readQueue(userId)).length);
 }
 
 export function isRetryableSyncError(error: unknown) {
   const message = workspaceSyncErrorMessage(error, String(error));
-  return /network|fetch|offline|timed?\s*out|connection|socket|failed to send|load failed/i.test(message);
+  return /network|fetch|offline|timed?\s*out|aborted?|connection|socket|failed to send|load failed/i.test(message);
 }
 
 export function subscribeToWorkspace(userId: string, onChange: () => void, onConnection: (connected: boolean) => void) {

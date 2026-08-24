@@ -3,3 +3,4 @@ export * from './auth';
 export * from './repository';
 export * from './agent-gateway';
 export * from './profile';
+export * from './oauth-onboarding';

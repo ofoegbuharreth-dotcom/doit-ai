@@ -39,10 +39,12 @@ describe('workspace sync recovery', () => {
   it('ends a suspended workspace request instead of leaving the UI syncing forever', async () => {
     vi.useFakeTimers();
     try {
-      const result = withWorkspaceSyncTimeout(new Promise<never>(() => undefined), 100);
+      const abort = vi.fn();
+      const result = withWorkspaceSyncTimeout(new Promise<never>(() => undefined), 100, abort);
       const rejection = expect(result).rejects.toThrow('Workspace sync timed out');
       await vi.advanceTimersByTimeAsync(100);
       await rejection;
+      expect(abort).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
