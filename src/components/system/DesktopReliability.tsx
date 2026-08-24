@@ -27,10 +27,11 @@ export function DesktopReliability() {
   }, []);
 
   const visible = isDesktop
-    && ['available', 'downloading', 'downloaded'].includes(state.phase)
+    && ['available', 'downloading', 'downloaded', 'installing'].includes(state.phase)
     && dismissedVersion !== state.availableVersion;
   const downloading = state.phase === 'downloading';
   const downloaded = state.phase === 'downloaded';
+  const installing = state.phase === 'installing';
   const notes = parseDesktopReleaseNotes(state.releaseNotes);
   const summary = compactReleaseSummary(notes.summary);
 
@@ -39,15 +40,15 @@ export function DesktopReliability() {
       <View style={styles.offlineIcon}><Ionicons name="cloud-offline-outline" color={colors.warning} size={19} /></View>
       <View style={styles.flex}><Text variant="label">You’re offline</Text><Text variant="caption" color="secondary">Your saved plan still works. Cloud changes will sync when your connection returns.</Text></View>
     </View> : null}
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !downloading && setDismissedVersion(state.availableVersion)}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => !downloading && !installing && setDismissedVersion(state.availableVersion)}>
       <View style={styles.overlay}>
-        <Pressable disabled={downloading} style={StyleSheet.absoluteFill} onPress={() => setDismissedVersion(state.availableVersion)} />
+        <Pressable disabled={downloading || installing} style={StyleSheet.absoluteFill} onPress={() => setDismissedVersion(state.availableVersion)} />
         <Animated.View accessibilityViewIsModal entering={FadeInDown.duration(260).springify().damping(22)} style={styles.dialog}>
           <View style={styles.headingRow}>
-            <View style={styles.icon}><Ionicons name={downloaded ? 'checkmark' : 'arrow-down'} color={colors.onAccent} size={23} /></View>
-            <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{downloaded ? 'Ready to restart.' : downloading ? `Downloading version ${state.availableVersion ?? ''}…` : `Version ${state.availableVersion ?? ''} is available.`}</Text></View>
+            <View style={styles.icon}><Ionicons name={installing ? 'sync' : downloaded ? 'checkmark' : 'arrow-down'} color={colors.onAccent} size={23} /></View>
+            <View style={styles.flex}><Text variant="eyebrow" color="accent">DOIT DESKTOP UPDATE</Text><Text variant="title">{installing ? 'Installing and reopening…' : downloaded ? 'Ready to restart.' : downloading ? `Downloading version ${state.availableVersion ?? ''}…` : `Version ${state.availableVersion ?? ''} is available.`}</Text></View>
           </View>
-          <Text color="secondary">{downloaded ? 'Click once and DOIT will close, install the update, and reopen itself. Your work is already saved.' : 'DOIT is downloading this update securely in the background. You can keep working.'}</Text>
+          <Text color="secondary">{installing ? 'No setup wizard is needed. DOIT AI will reopen automatically when the silent update is complete.' : downloaded ? 'Click once and DOIT will close, install the update silently, and reopen itself. Your work is already saved.' : 'DOIT is downloading this update securely in the background. You can keep working.'}</Text>
           <View style={styles.summary}><Text variant="eyebrow" color="accent">WHY UPDATE</Text><Text color="secondary">{summary}</Text></View>
           {notes.highlights.length ? <View style={styles.notes}><Text variant="eyebrow" color="accent">WHAT THIS UPDATE INCLUDES</Text>{notes.highlights.map((highlight) => <View key={highlight} style={styles.note}><View style={styles.noteIcon}><Ionicons name="checkmark" color={colors.accent} size={13} /></View><Text variant="caption" style={styles.flex}>{highlight}</Text></View>)}</View> : null}
           {downloading ? <View style={styles.progressBlock}>
@@ -58,8 +59,8 @@ export function DesktopReliability() {
             <Ionicons name="refresh" color={colors.onAccent} size={19} />
             <Text variant="label" style={styles.primaryText}>Restart DOIT AI</Text>
           </Pressable> : null}
-          <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Keep working'}</Text></Pressable>
-          <Pressable onPress={() => { setDismissedVersion(state.availableVersion); router.push('/version-logs' as never); }} style={styles.logs}><Ionicons name="newspaper-outline" color={colors.textMuted} size={16} /><Text variant="caption" color="muted">View all version logs</Text></Pressable>
+          {!installing ? <Pressable onPress={() => setDismissedVersion(state.availableVersion)} style={styles.later}><Text variant="label" color="secondary">{downloaded ? 'Restart later' : 'Keep working'}</Text></Pressable> : null}
+          {!installing ? <Pressable onPress={() => { setDismissedVersion(state.availableVersion); router.push('/version-logs' as never); }} style={styles.logs}><Ionicons name="newspaper-outline" color={colors.textMuted} size={16} /><Text variant="caption" color="muted">View all version logs</Text></Pressable> : null}
         </Animated.View>
       </View>
     </Modal>

@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.2.17",
+    "date": "2026-08-24",
+    "title": "Update once. Skip the installer.",
+    "summary": "Desktop updates now close DOIT AI, install silently, and reopen the updated app without showing the setup wizard again.",
+    "highlights": [
+      "One-click restart from the DOIT update popup",
+      "Silent installation for existing Windows users",
+      "Automatic relaunch as soon as the update finishes",
+      "No repeated installation-location or user-selection screens",
+      "The full installer remains available for first-time installs"
+    ]
+  },
+  {
     "version": "1.2.16",
     "date": "2026-08-24",
     "title": "Return to DOIT. Stay in sync.",

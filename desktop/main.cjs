@@ -279,7 +279,11 @@ if (!gotLock) {
     });
     ipcMain.handle('desktop:install-update', () => {
       if (updateState.phase !== 'downloaded') return false;
-      autoUpdater.quitAndInstall(false, true);
+      publishUpdateState({ phase: 'installing', message: 'DOIT AI is closing to install the update, then it will reopen automatically.' });
+      // The first flag keeps NSIS in silent update mode, so an existing user
+      // never has to walk through the installer again. The second flag forces
+      // the freshly updated app to reopen as soon as installation completes.
+      setImmediate(() => autoUpdater.quitAndInstall(true, true));
       return true;
     });
     Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([

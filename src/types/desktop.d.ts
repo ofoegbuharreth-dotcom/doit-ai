@@ -1,7 +1,7 @@
 export {};
 
 declare global {
-  type DesktopUpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error' | 'unsupported';
+  type DesktopUpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'up-to-date' | 'error' | 'unsupported';
 
   interface DesktopUpdateState {
     phase: DesktopUpdatePhase;

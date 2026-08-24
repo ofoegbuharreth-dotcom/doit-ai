@@ -2,7 +2,7 @@
   "expo": {
     "name": "DOIT AI",
     "slug": "doit-ai",
-    "version": "1.2.16",
+    "version": "1.2.17",
     "icon": "./assets/doit-logo.png",
     "orientation": "default",
     "userInterfaceStyle": "dark",
@@ -11,11 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.doitai.app",
-      "buildNumber": "6"
+      "buildNumber": "7"
     },
     "android": {
       "package": "com.doitai.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/doit-logo.png",
         "backgroundColor": "#090A0C"
